@@ -14,9 +14,9 @@ export function QuestionCard({ question, index }: QuestionCardProps) {
   return (
     <motion.article
       className="glass glass-hover flex flex-col rounded-2xl p-6"
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
+      transition={{ delay: Math.min(index * 0.02, 0.4) }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <Badge label={question.difficulty} variant={question.difficulty} />

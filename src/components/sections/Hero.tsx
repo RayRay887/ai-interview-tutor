@@ -72,9 +72,9 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.5 }}
             >
               {[
-                { value: 'Two Sum', label: 'Most practiced' },
-                { value: 'Three Sum', label: 'Trending now' },
-                { value: '10+', label: 'Sample problems' },
+                { value: 'Pair Target', label: 'Most practiced' },
+                { value: 'Zero-Sum Triplets', label: 'Trending now' },
+                { value: '100+', label: 'Practice problems' },
               ].map((stat) => (
                 <div key={stat.label}>
                   <p className="text-lg font-semibold text-text-primary sm:text-2xl">

@@ -19,7 +19,7 @@ export function TerminalPreview() {
           <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
         </div>
         <span className="ml-2 font-mono text-xs text-text-secondary">
-          two_sum.py — Prepify Interview
+          pair_target.py — Prepify Interview
         </span>
       </div>
 
@@ -34,9 +34,9 @@ export function TerminalPreview() {
               {i === 0 ? (
                 <>
                   <span className="text-accent-purple">def </span>
-                  <span className="text-accent-blue">two_sum</span>
+                  <span className="text-accent-blue">pair_target_indices</span>
                   <span className="text-text-secondary">
-                    (nums: list[int], target: int) -&gt; list[int]:
+                    (values: list[int], target: int) -&gt; list[int]:
                   </span>
                 </>
               ) : (
