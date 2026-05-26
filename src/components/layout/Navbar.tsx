@@ -1,14 +1,22 @@
 import { motion } from 'framer-motion'
-import { ArrowLeft, Menu, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, LogOut, Menu, Sparkles, User, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { navLinks } from '../../data/nav'
 import { Button } from '../ui/Button'
 
 export function Navbar() {
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+
+  const handleSignOut = () => {
+    signOut()
+    navigate('/auth')
+  }
   const isHome = location.pathname === '/'
   const isPractice = location.pathname.startsWith('/practice/')
 
@@ -77,10 +85,24 @@ export function Navbar() {
             ))}
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden items-center gap-4 md:flex">
+            {user && (
+              <span className="flex items-center gap-2 text-sm text-text-secondary">
+                <User className="h-4 w-4 text-accent-blue" />
+                {user.name.split(' ')[0]}
+              </span>
+            )}
             <Button to="/questions" variant="primary">
               Start Practicing
             </Button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
           </div>
 
           <button
@@ -110,9 +132,23 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {user && (
+              <p className="flex items-center gap-2 text-sm text-text-secondary">
+                <User className="h-4 w-4 text-accent-blue" />
+                Signed in as {user.name}
+              </p>
+            )}
             <Button to="/questions" variant="primary" className="w-full">
               Start Practicing
             </Button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm text-text-secondary hover:bg-white/5"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
           </div>
         </motion.div>
       )}
