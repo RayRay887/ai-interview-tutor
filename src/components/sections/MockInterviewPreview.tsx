@@ -64,10 +64,10 @@ export function MockInterviewPreview() {
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
               </div>
               <span className="text-sm font-medium text-text-primary">
-                Two Sum — Mock Interview
+                Pair Target Indices — Mock Interview
               </span>
-              <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-400">
-                Medium
+              <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">
+                Easy
               </span>
             </div>
             <div className="flex items-center gap-4">

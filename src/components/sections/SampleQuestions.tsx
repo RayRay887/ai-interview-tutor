@@ -15,7 +15,7 @@ export function SampleQuestions() {
         <SectionHeading
           label="Practice Questions"
           title="Start with popular problems"
-          description="Two Sum, Three Sum, and more — pick a question and jump into a mock interview session."
+          description="Pair Target Indices, Zero-Sum Triplets, and more — pick a question and jump into a mock interview session."
         />
 
         <div className="mt-16 grid gap-4 sm:grid-cols-2">

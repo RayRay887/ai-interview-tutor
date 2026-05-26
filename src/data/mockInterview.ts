@@ -1,6 +1,6 @@
-export const terminalCode = `def two_sum(nums: list[int], target: int) -> list[int]:
+export const terminalCode = `def pair_target_indices(values: list[int], target: int) -> list[int]:
     seen = {}
-    for i, num in enumerate(nums):
+    for i, num in enumerate(values):
         complement = target - num
         if complement in seen:
             return [seen[complement], i]
@@ -19,8 +19,7 @@ export const aiMessages = [
 ]
 
 export const testCases = [
-  { input: 'nums = [2,7,11,15], target = 9', output: '[0, 1]', status: 'passed' as const },
-  { input: 'nums = [3,2,4], target = 6', output: '[1, 2]', status: 'passed' as const },
-  { input: 'nums = [3,3], target = 6', output: '[0, 1]', status: 'running' as const },
+  { input: 'values = [3, 8, 1, 6], target = 9', output: '[0, 3]', status: 'passed' as const },
+  { input: 'values = [4, 5, 1], target = 6', output: '[1, 2]', status: 'passed' as const },
+  { input: 'values = [3, 3], target = 6', output: '[0, 1]', status: 'running' as const },
 ]
-
