@@ -24,6 +24,35 @@
   ::selection {
     @apply bg-accent-blue/30 text-text-primary;
   }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(77, 163, 255, 0.35) rgba(11, 23, 48, 0.85);
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: rgba(11, 23, 48, 0.85);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(77, 163, 255, 0.35);
+    border: 2px solid rgba(11, 23, 48, 0.85);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(77, 163, 255, 0.55);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: rgba(11, 23, 48, 0.85);
+  }
 }
 
 @layer utilities {
@@ -65,6 +94,31 @@
     content: '';
     @apply ml-0.5 inline-block h-[1.1em] w-2 align-middle bg-accent-blue;
     animation: cursor-blink 1s step-end infinite;
+  }
+
+  .theme-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(77, 163, 255, 0.35) rgba(11, 23, 48, 0.85);
+  }
+
+  .theme-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .theme-scrollbar::-webkit-scrollbar-track {
+    background: rgba(11, 23, 48, 0.85);
+    border-radius: 9999px;
+  }
+
+  .theme-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(77, 163, 255, 0.35);
+    border: 2px solid rgba(11, 23, 48, 0.85);
+    border-radius: 9999px;
+  }
+
+  .theme-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(77, 163, 255, 0.55);
   }
 }
 

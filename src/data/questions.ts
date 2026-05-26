@@ -11,6 +11,7 @@ export interface Question {
   featured?: boolean
   starterCode: string
   examples: { input: string; output: string }[]
+  constraints?: string[]
 }
 
 export const questions: Question[] = [
@@ -31,6 +32,11 @@ export const questions: Question[] = [
       { input: 'nums = [2,7,11,15], target = 9', output: '[0, 1]' },
       { input: 'nums = [3,2,4], target = 6', output: '[1, 2]' },
     ],
+    constraints: [
+      '2 ≤ nums.length ≤ 10⁴',
+      'Each input has exactly one solution.',
+      'You may not use the same element twice.',
+    ],
   },
   {
     id: '2',
@@ -48,6 +54,10 @@ export const questions: Question[] = [
     examples: [
       { input: 'nums = [-1,0,1,2,-1,-4]', output: '[[-1,-1,2],[-1,0,1]]' },
       { input: 'nums = [0,1,1]', output: '[]' },
+    ],
+    constraints: [
+      '3 ≤ nums.length ≤ 3000',
+      'All triplets in the answer must be unique.',
     ],
   },
   {
@@ -67,6 +77,10 @@ export const questions: Question[] = [
       { input: 's = "()"', output: 'true' },
       { input: 's = "(]"', output: 'false' },
     ],
+    constraints: [
+      '1 ≤ s.length ≤ 10⁴',
+      's consists of parentheses only: ()[]{}',
+    ],
   },
   {
     id: '4',
@@ -85,6 +99,10 @@ export const questions: Question[] = [
       { input: 's = "abcabcbb"', output: '3' },
       { input: 's = "bbbbb"', output: '1' },
     ],
+    constraints: [
+      '0 ≤ s.length ≤ 5 × 10⁴',
+      's consists of English letters, digits, symbols, and spaces.',
+    ],
   },
   {
     id: '5',
@@ -100,6 +118,11 @@ export const questions: Question[] = [
     pass`,
     examples: [
       { input: 'intervals = [[1,3],[2,6],[8,10],[15,18]]', output: '[[1,6],[8,10],[15,18]]' },
+    ],
+    constraints: [
+      '1 ≤ intervals.length ≤ 10⁴',
+      'intervals[i].length == 2',
+      '0 ≤ start_i ≤ end_i ≤ 10⁴',
     ],
   },
   {
@@ -117,6 +140,10 @@ export const questions: Question[] = [
     examples: [
       { input: 'head = [1,2,3,4,5]', output: '[5,4,3,2,1]' },
     ],
+    constraints: [
+      'The number of nodes in the list is in the range [0, 5000].',
+      '-5000 ≤ Node.val ≤ 5000',
+    ],
   },
   {
     id: '7',
@@ -132,6 +159,10 @@ export const questions: Question[] = [
     pass`,
     examples: [
       { input: 'root = [3,9,20,null,null,15,7]', output: '[[3],[9,20],[15,7]]' },
+    ],
+    constraints: [
+      'The number of nodes in the tree is in the range [0, 2000].',
+      '-1000 ≤ Node.val ≤ 1000',
     ],
   },
   {
@@ -149,6 +180,11 @@ export const questions: Question[] = [
     examples: [
       { input: 'coins = [1,2,5], amount = 11', output: '3' },
     ],
+    constraints: [
+      '1 ≤ coins.length ≤ 12',
+      '1 ≤ coins[i] ≤ 2³¹ − 1',
+      '0 ≤ amount ≤ 10⁴',
+    ],
   },
   {
     id: '9',
@@ -164,6 +200,12 @@ export const questions: Question[] = [
     pass`,
     examples: [
       { input: 'grid = [["1","1","0"],["0","1","0"],["1","0","1"]]', output: '3' },
+    ],
+    constraints: [
+      'm == grid.length',
+      'n == grid[i].length',
+      '1 ≤ m, n ≤ 300',
+      'grid[i][j] is "0" or "1".',
     ],
   },
   {
@@ -181,6 +223,9 @@ export const questions: Question[] = [
     examples: [
       { input: 'n = 3', output: '3' },
       { input: 'n = 5', output: '8' },
+    ],
+    constraints: [
+      '1 ≤ n ≤ 45',
     ],
   },
 ]
