@@ -1,9 +1,11 @@
 import { motion } from 'framer-motion'
-import { ArrowLeft, LogOut, Menu, Sparkles, User, X } from 'lucide-react'
+import { ArrowLeft, LogOut, Menu, User, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { navLinks } from '../../data/nav'
+import { PrepifyLogo } from '../brand/PrepifyLogo'
+import { NavLinkItem } from './NavLinkItem'
 import { Button } from '../ui/Button'
 
 export function Navbar() {
@@ -32,14 +34,7 @@ export function Navbar() {
 
   const showBlur = scrolled || !isHome || isPractice
 
-  const brand = (
-    <div className="flex items-center gap-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-accent-blue to-accent-purple shadow-lg shadow-accent-blue/30">
-        <Sparkles className="h-4 w-4 text-white" />
-      </div>
-      <span className="text-lg font-semibold tracking-tight text-text-primary">Prepify</span>
-    </div>
-  )
+  const brand = <PrepifyLogo size="md" />
 
   const backLink = (
     <Link
@@ -71,17 +66,15 @@ export function Navbar() {
         </nav>
       ) : (
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link to="/">{brand}</Link>
+          <div>{brand}</div>
 
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden items-center gap-5 lg:gap-6 md:flex">
             {navLinks.map((link) => (
-              <Link
+              <NavLinkItem
                 key={link.label}
-                to={link.href}
+                link={link}
                 className="text-sm text-text-secondary transition-colors hover:text-text-primary"
-              >
-                {link.label}
-              </Link>
+              />
             ))}
           </div>
 
@@ -124,13 +117,12 @@ export function Navbar() {
         >
           <div className="flex flex-col gap-4">
             {navLinks.map((link) => (
-              <Link
+              <NavLinkItem
                 key={link.label}
-                to={link.href}
+                link={link}
                 className="text-sm text-text-secondary hover:text-text-primary"
-              >
-                {link.label}
-              </Link>
+                onNavigate={() => setMobileOpen(false)}
+              />
             ))}
             {user && (
               <p className="flex items-center gap-2 text-sm text-text-secondary">

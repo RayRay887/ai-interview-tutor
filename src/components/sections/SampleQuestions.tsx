@@ -8,7 +8,7 @@ import { SectionHeading } from '../ui/SectionHeading'
 
 export function SampleQuestions() {
   return (
-    <section id="questions" className="relative py-24 sm:py-32">
+    <section id="samples" className="relative py-24 sm:py-32">
       <div className="absolute inset-0 bg-linear-to-b from-transparent via-bg-secondary/30 to-transparent" />
 
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">

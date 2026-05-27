@@ -7,7 +7,7 @@ import { GradientText } from '../ui/GradientText'
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen overflow-hidden pt-28 pb-20 sm:pt-32 lg:pt-36">
+    <section id="home" className="relative min-h-screen overflow-hidden pt-28 pb-20 sm:pt-32 lg:pt-36">
       <Particles count={35} />
 
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
