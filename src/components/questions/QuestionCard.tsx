@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { Clock } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import type { Question } from '../../data/questions'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -44,16 +43,10 @@ export function QuestionCard({ question, index }: QuestionCardProps) {
         </div>
       )}
 
-      <div className="mt-6 flex gap-3">
-        <Button to={`/practice/${question.slug}`} variant="primary" className="flex-1">
+      <div className="mt-6">
+        <Button to={`/practice/${question.slug}`} variant="primary" className="w-full">
           Start Practicing
         </Button>
-        <Link
-          to={`/practice/${question.slug}`}
-          className="glass flex items-center justify-center rounded-lg px-4 py-2.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
-        >
-          Details
-        </Link>
       </div>
     </motion.article>
   )
