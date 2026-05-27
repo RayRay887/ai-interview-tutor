@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { scrollToTop } from '../lib/scrollToTop'
 import { QuestionCard } from '../components/questions/QuestionCard'
 import { GradientText } from '../components/ui/GradientText'
 import type { Difficulty } from '../data/questions'
@@ -13,6 +14,10 @@ export function QuestionsPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>('All')
   const [difficulty, setDifficulty] = useState<string>('All')
+
+  useEffect(() => {
+    scrollToTop()
+  }, [])
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()

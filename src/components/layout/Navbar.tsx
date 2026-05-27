@@ -34,7 +34,7 @@ export function Navbar() {
 
   const showBlur = scrolled || !isHome || isPractice
 
-  const brand = <PrepifyLogo size="md" />
+  const brand = <PrepifyLogo size="md" to="/" linked />
 
   const backLink = (
     <Link

@@ -1,4 +1,7 @@
-import { Link } from 'react-router-dom'
+import { type MouseEvent } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { scrollToHash } from '../../lib/scrollToHash'
+import { scrollToTop } from '../../lib/scrollToTop'
 
 const sizes = {
   sm: { box: 'h-7 w-7', icon: 16, text: 'text-base', gap: 'gap-2', radius: 'rounded-md' },
@@ -63,6 +66,19 @@ export function PrepifyLogo({
   className = '',
 }: PrepifyLogoProps) {
   const s = sizes[size]
+  const location = useLocation()
+  const homePath = to.split('#')[0] || '/'
+
+  const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (location.pathname !== homePath) return
+
+    e.preventDefault()
+    if (homePath === '/') {
+      scrollToHash('')
+    } else {
+      scrollToTop('smooth')
+    }
+  }
 
   const content = (
     <div className={`group flex items-center ${s.gap} ${className}`}>
@@ -87,6 +103,9 @@ export function PrepifyLogo({
     return (
       <Link
         to={to}
+        onClick={handleClick}
+        aria-label="Go to homepage"
+        title="Go to homepage"
         className="inline-flex rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/50"
       >
         {content}

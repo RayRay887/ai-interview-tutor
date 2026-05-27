@@ -1,6 +1,7 @@
 import { motion, type HTMLMotionProps } from 'framer-motion'
-import { type ReactNode } from 'react'
+import { type MouseEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { scrollToTopIfSamePath } from '../../lib/scrollToTop'
 
 type Variant = 'primary' | 'secondary' | 'ghost'
 
@@ -30,9 +31,15 @@ export function Button({
   const classes = `inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-300 ${variants[variant]} ${className}`
 
   if (to) {
+    const handleLinkClick = (e: MouseEvent<HTMLAnchorElement>) => {
+      if (scrollToTopIfSamePath(to)) {
+        e.preventDefault()
+      }
+    }
+
     return (
       <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-        <Link to={to} className={classes}>
+        <Link to={to} className={classes} onClick={handleLinkClick}>
           {children}
         </Link>
       </motion.div>

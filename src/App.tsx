@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { ScrollToTop } from './components/layout/ScrollToTop'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { PublicRoute } from './components/auth/PublicRoute'
@@ -14,6 +15,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <Routes>
           <Route element={<PublicRoute />}>
             <Route element={<AuthLayout />}>

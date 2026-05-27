@@ -2,6 +2,7 @@ import { type MouseEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import type { NavLink } from '../../data/nav'
 import { scrollToHash } from '../../lib/scrollToHash'
+import { scrollToTopIfSamePath } from '../../lib/scrollToTop'
 
 interface NavLinkItemProps {
   link: NavLink
@@ -19,6 +20,13 @@ export function NavLinkItem({ link, className = '', onNavigate }: NavLinkItemPro
       if (link.href === '/' && location.pathname === '/') {
         e.preventDefault()
         scrollToHash('')
+        onNavigate?.()
+        return
+      }
+      if (scrollToTopIfSamePath(link.href)) {
+        e.preventDefault()
+        onNavigate?.()
+        return
       }
       onNavigate?.()
       return
