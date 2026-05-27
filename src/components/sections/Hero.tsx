@@ -27,17 +27,37 @@ export function Hero() {
               </span>
             </motion.div>
 
-            <motion.h1
-              className="text-4xl font-semibold leading-[1.1] tracking-tight text-text-primary sm:text-5xl lg:text-6xl"
+            <motion.div
+              className="relative"
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
             >
-              Coding is only{' '}
-              <GradientText as="span" className="block sm:inline">
-                half the interview.
-              </GradientText>
-            </motion.h1>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-x-6 top-8 h-40 bg-linear-to-r from-accent-blue/15 via-accent-purple/25 to-accent-blue/15 blur-3xl sm:-inset-x-10 sm:top-10 sm:h-48"
+              />
+
+              <h1 className="relative max-w-xl">
+                <span className="block text-[2rem] font-bold leading-none tracking-tight text-text-primary sm:text-5xl lg:text-6xl">
+                  You Can&apos;t
+                </span>
+                <GradientText
+                  as="span"
+                  className="hero-headline-glow mt-1 block text-[3.25rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:mt-2 sm:text-7xl lg:text-8xl"
+                >
+                  Just Code
+                </GradientText>
+              </h1>
+
+              <div className="relative mt-6 flex items-center gap-4 sm:mt-8">
+                <span className="h-px w-10 shrink-0 bg-linear-to-r from-accent-blue/70 to-accent-purple/30 sm:w-14" />
+                <p className="text-sm font-medium tracking-[0.18em] text-text-secondary uppercase sm:text-base">
+                  Learn how to articulate
+                </p>
+                <span className="h-px w-10 shrink-0 bg-linear-to-l from-accent-blue/70 to-accent-purple/30 sm:w-14" />
+              </div>
+            </motion.div>
 
             <motion.p
               className="mt-6 max-w-xl text-lg leading-relaxed text-text-secondary"
