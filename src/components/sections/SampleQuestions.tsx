@@ -1,12 +1,27 @@
 import { motion } from 'framer-motion'
 import { ArrowRight, ChevronRight, Clock } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { useSignInModal } from '../../context/SignInModalContext'
 import { featuredQuestions } from '../../data/questions'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { SectionHeading } from '../ui/SectionHeading'
 
 export function SampleQuestions() {
+  const { user } = useAuth()
+  const { openSignIn } = useSignInModal()
+  const navigate = useNavigate()
+
+  const handleStartPracticing = (slug: string) => {
+    const path = `/practice/${slug}`
+    if (user) {
+      navigate(path)
+      return
+    }
+    openSignIn({ redirectTo: path })
+  }
+
   return (
     <section id="samples" className="relative py-24 sm:py-32">
       <div className="absolute inset-0 bg-linear-to-b from-transparent via-bg-secondary/30 to-transparent" />
@@ -27,9 +42,10 @@ export function SampleQuestions() {
               viewport={{ once: true }}
               transition={{ delay: index * 0.08 }}
             >
-              <Link
-                to={`/practice/${question.slug}`}
-                className="glass glass-hover group block rounded-2xl p-6 transition-transform duration-300 hover:-translate-y-1"
+              <button
+                type="button"
+                onClick={() => handleStartPracticing(question.slug)}
+                className="glass glass-hover group block w-full rounded-2xl p-6 text-left transition-transform duration-300 hover:-translate-y-1"
               >
                 <div className="flex items-start justify-between gap-3">
                   <Badge label={question.difficulty} variant={question.difficulty} />
@@ -53,7 +69,7 @@ export function SampleQuestions() {
                     <ChevronRight className="h-3.5 w-3.5" />
                   </span>
                 </div>
-              </Link>
+              </button>
             </motion.div>
           ))}
         </div>
