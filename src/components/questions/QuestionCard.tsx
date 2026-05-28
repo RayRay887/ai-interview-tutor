@@ -1,5 +1,8 @@
 import { motion } from 'framer-motion'
 import { Clock } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { useSignInModal } from '../../context/SignInModalContext'
 import type { Question } from '../../data/questions'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -10,6 +13,19 @@ interface QuestionCardProps {
 }
 
 export function QuestionCard({ question, index }: QuestionCardProps) {
+  const { user } = useAuth()
+  const { openSignIn } = useSignInModal()
+  const navigate = useNavigate()
+
+  const handleStartPracticing = () => {
+    const path = `/practice/${question.slug}`
+    if (user) {
+      navigate(path)
+      return
+    }
+    openSignIn({ redirectTo: path })
+  }
+
   return (
     <motion.article
       className="glass glass-hover flex flex-col rounded-2xl p-6"
@@ -44,7 +60,7 @@ export function QuestionCard({ question, index }: QuestionCardProps) {
       )}
 
       <div className="mt-6">
-        <Button to={`/practice/${question.slug}`} variant="primary" className="w-full">
+        <Button onClick={handleStartPracticing} variant="primary" className="w-full">
           Start Practicing
         </Button>
       </div>

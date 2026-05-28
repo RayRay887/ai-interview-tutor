@@ -1,3 +1,4 @@
+import type { EmailOtpType, User } from '@supabase/supabase-js'
 import {
   createContext,
   useCallback,
@@ -7,29 +8,43 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import {
-  clearSession,
-  getSession,
-  getStoredUsers,
-  normalizeEmail,
-  saveStoredUsers,
-  setSession,
-  type SessionUser,
-  type StoredUser,
-} from '../lib/authStorage'
+import { isSupabaseConfigured, normalizeEmail, supabase } from '../lib/supabase'
+
+export interface SessionUser {
+  id: string
+  name: string
+  email: string
+}
+
+export type OtpPurpose = 'signup' | 'signin'
 
 interface AuthContextValue {
   user: SessionUser | null
   isLoading: boolean
-  signIn: (email: string, password: string) => Promise<void>
   signUp: (name: string, email: string, password: string) => Promise<void>
-  signOut: () => void
+  signIn: (email: string, password: string) => Promise<void>
+  verifyOtp: (email: string, token: string, purpose: OtpPurpose) => Promise<void>
+  resendOtp: (email: string, purpose: OtpPurpose) => Promise<void>
+  signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function toSession(user: StoredUser): SessionUser {
-  return { id: user.id, name: user.name, email: user.email }
+function toSessionUser(user: User): SessionUser {
+  const name =
+    (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
+    user.email?.split('@')[0] ||
+    'User'
+
+  return {
+    id: user.id,
+    name,
+    email: user.email ?? '',
+  }
+}
+
+function toOtpType(purpose: OtpPurpose): EmailOtpType {
+  return purpose === 'signup' ? 'signup' : 'email'
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -37,60 +52,151 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    setUser(getSession())
-    setIsLoading(false)
-  }, [])
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    const normalized = normalizeEmail(email)
-    const found = getStoredUsers().find(
-      (u) => u.email === normalized && u.password === password,
-    )
-    if (!found) {
-      throw new Error('Invalid email or password.')
+    if (!isSupabaseConfigured()) {
+      setIsLoading(false)
+      return
     }
-    const session = toSession(found)
-    setSession(session)
-    setUser(session)
+
+    let mounted = true
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
+      setUser(session?.user ? toSessionUser(session.user) : null)
+      setIsLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ? toSessionUser(session.user) : null)
+      setIsLoading(false)
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signUp = useCallback(async (name: string, email: string, password: string) => {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase is not configured. Add your credentials to .env.')
+    }
+
     const trimmedName = name.trim()
     const normalized = normalizeEmail(email)
 
     if (!trimmedName) {
       throw new Error('Please enter your name.')
     }
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters.')
-    }
 
-    const users = getStoredUsers()
-    if (users.some((u) => u.email === normalized)) {
-      throw new Error('An account with this email already exists.')
-    }
-
-    const newUser: StoredUser = {
-      id: crypto.randomUUID(),
-      name: trimmedName,
+    const { data, error } = await supabase.auth.signUp({
       email: normalized,
       password,
+      options: {
+        data: { name: trimmedName },
+      },
+    })
+
+    if (error) {
+      throw new Error(error.message)
     }
 
-    saveStoredUsers([...users, newUser])
-    const session = toSession(newUser)
-    setSession(session)
-    setUser(session)
+    // Hold the session until the email code is verified.
+    if (data.session) {
+      await supabase.auth.signOut()
+    }
   }, [])
 
-  const signOut = useCallback(() => {
-    clearSession()
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase is not configured. Add your credentials to .env.')
+    }
+
+    const normalized = normalizeEmail(email)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalized,
+      password,
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    await supabase.auth.signOut()
+
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: normalized,
+      options: { shouldCreateUser: false },
+    })
+
+    if (otpError) {
+      throw new Error(otpError.message)
+    }
+  }, [])
+
+  const verifyOtp = useCallback(async (email: string, token: string, purpose: OtpPurpose) => {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase is not configured. Add your credentials to .env.')
+    }
+
+    const normalized = normalizeEmail(email)
+    const code = token.replace(/\D/g, '')
+
+    if (code.length !== 6) {
+      throw new Error('Enter the 6-digit verification code from your email.')
+    }
+
+    const { error } = await supabase.auth.verifyOtp({
+      email: normalized,
+      token: code,
+      type: toOtpType(purpose),
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+  }, [])
+
+  const resendOtp = useCallback(async (email: string, purpose: OtpPurpose) => {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase is not configured. Add your credentials to .env.')
+    }
+
+    const normalized = normalizeEmail(email)
+
+    if (purpose === 'signup') {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: normalized,
+      })
+      if (error) {
+        throw new Error(error.message)
+      }
+      return
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: normalized,
+      options: { shouldCreateUser: false },
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+  }, [])
+
+  const signOut = useCallback(async () => {
+    if (isSupabaseConfigured()) {
+      await supabase.auth.signOut()
+    }
     setUser(null)
   }, [])
 
   const value = useMemo(
-    () => ({ user, isLoading, signIn, signUp, signOut }),
-    [user, isLoading, signIn, signUp, signOut],
+    () => ({ user, isLoading, signUp, signIn, verifyOtp, resendOtp, signOut }),
+    [user, isLoading, signUp, signIn, verifyOtp, resendOtp, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

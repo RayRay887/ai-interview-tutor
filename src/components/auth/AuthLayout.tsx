@@ -16,8 +16,7 @@ export function AuthLayout() {
       <Outlet />
 
       <p className="relative mt-8 max-w-sm text-center text-xs text-text-secondary/80">
-        Accounts are stored locally in your browser for this demo. A secure backend will be added
-        later.
+        Sign in with email and password, then enter the 6-digit code Supabase sends to your inbox.
       </p>
     </div>
   )
