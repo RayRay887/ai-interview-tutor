@@ -1,9 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, Lock, Mail, User } from 'lucide-react'
+import { ArrowRight, Mail, User } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GradientText } from '../components/ui/GradientText'
+import { PasswordInput } from '../components/ui/PasswordInput'
 
 type AuthMode = 'signin' | 'signup'
 
@@ -130,22 +131,16 @@ export function AuthPage() {
           </div>
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-text-secondary">Password</label>
-          <div className="relative">
-            <Lock className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-secondary" />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
-              required
-              minLength={mode === 'signup' ? 6 : 1}
-              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-              className="w-full rounded-lg border border-white/10 bg-bg-primary/80 py-2.5 pr-4 pl-10 text-sm text-text-primary outline-none placeholder:text-text-secondary/50 focus:border-accent-blue/50"
-            />
-          </div>
-        </div>
+        <PasswordInput
+          id="auth-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
+          required
+          minLength={mode === 'signup' ? 6 : 1}
+          autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+          key={mode}
+        />
 
         {error && (
           <motion.p
