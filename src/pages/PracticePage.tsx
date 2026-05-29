@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { MicrophoneSetupModal } from '../components/practice/MicrophoneSetupModal'
 import { PracticeSession } from '../components/practice/PracticeSession'
+import { SessionSetupModal } from '../components/practice/SessionSetupModal'
 import { useAuth } from '../context/AuthContext'
 import { useSignInModal } from '../context/SignInModalContext'
 import { getQuestionBySlug } from '../data/questions'
@@ -12,7 +13,9 @@ export function PracticePage() {
   const { openSignIn } = useSignInModal()
   const navigate = useNavigate()
   const question = slug ? getQuestionBySlug(slug) : undefined
+  const [sessionMinutes, setSessionMinutes] = useState<number | null>(null)
   const [micReady, setMicReady] = useState(false)
+  const [micDeviceId, setMicDeviceId] = useState('')
   const [authPrompted, setAuthPrompted] = useState(false)
 
   useEffect(() => {
@@ -45,9 +48,32 @@ export function PracticePage() {
     )
   }
 
-  if (!micReady) {
-    return <MicrophoneSetupModal onConfirm={() => setMicReady(true)} />
+  if (sessionMinutes === null) {
+    return (
+      <SessionSetupModal
+        question={question}
+        onConfirm={setSessionMinutes}
+        onCancel={() => navigate('/questions')}
+      />
+    )
   }
 
-  return <PracticeSession question={question} />
+  if (!micReady) {
+    return (
+      <MicrophoneSetupModal
+        onConfirm={(deviceId) => {
+          setMicDeviceId(deviceId)
+          setMicReady(true)
+        }}
+      />
+    )
+  }
+
+  return (
+    <PracticeSession
+      question={question}
+      microphoneDeviceId={micDeviceId}
+      sessionMinutes={sessionMinutes}
+    />
+  )
 }

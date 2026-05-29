@@ -2,7 +2,7 @@ import { Mic, Play, Square, Volume2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface MicrophoneSetupModalProps {
-  onConfirm: () => void
+  onConfirm: (deviceId: string) => void
 }
 
 function isVirtualDeviceId(deviceId: string) {
@@ -323,7 +323,7 @@ export function MicrophoneSetupModal({ onConfirm }: MicrophoneSetupModalProps) {
 
   const handleConfirm = () => {
     stopStream()
-    onConfirm()
+    onConfirm(selectedDeviceId)
   }
 
   const canConfirm =
