@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Lock, Mail, User } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Mail, User } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useAuth, type OtpPurpose } from '../../context/AuthContext'
 import { GradientText } from '../ui/GradientText'
+import { PasswordInput } from '../ui/PasswordInput'
 import { OtpInput } from './OtpInput'
 
 type AuthMode = 'signin' | 'signup'
@@ -188,42 +189,29 @@ export function SignInForm({ onSuccess, initialMode = 'signin' }: SignInFormProp
             </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-text-secondary">Password</label>
-            <div className="relative">
-              <Lock className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-secondary" />
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
-                required
-                minLength={mode === 'signup' ? 6 : 1}
-                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                className="w-full rounded-lg border border-white/10 bg-bg-primary/80 py-2.5 pr-4 pl-10 text-sm text-text-primary outline-none placeholder:text-text-secondary/50 focus:border-accent-blue/50"
-              />
-            </div>
-          </div>
+          <PasswordInput
+            id="auth-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
+            required
+            minLength={mode === 'signup' ? 6 : 1}
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            key={`password-${mode}`}
+          />
 
           {mode === 'signup' && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-text-secondary">
-                Confirm password
-              </label>
-              <div className="relative">
-                <Lock className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-secondary" />
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  placeholder="Re-enter your password"
-                  required
-                  minLength={6}
-                  autoComplete="new-password"
-                  className="w-full rounded-lg border border-white/10 bg-bg-primary/80 py-2.5 pr-4 pl-10 text-sm text-text-primary outline-none placeholder:text-text-secondary/50 focus:border-accent-blue/50"
-                />
-              </div>
-            </div>
+            <PasswordInput
+              id="auth-confirm-password"
+              label="Confirm password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Re-enter your password"
+              required
+              minLength={6}
+              autoComplete="new-password"
+              key="confirm-password"
+            />
           )}
 
           {error && (

@@ -125,6 +125,18 @@
   .theme-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(77, 163, 255, 0.55);
   }
+
+  .password-input::-ms-reveal,
+  .password-input::-ms-clear {
+    display: none;
+  }
+
+  .password-input::-webkit-credentials-auto-fill-button,
+  .password-input::-webkit-strong-password-auto-fill-button {
+    display: none !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 
 @keyframes gradient-shift {
