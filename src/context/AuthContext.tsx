@@ -16,7 +16,7 @@ export interface SessionUser {
   email: string
 }
 
-export type OtpPurpose = 'signup' | 'signin'
+export type OtpPurpose = 'signup'
 
 interface AuthContextValue {
   user: SessionUser | null
@@ -43,8 +43,8 @@ function toSessionUser(user: User): SessionUser {
   }
 }
 
-function toOtpType(purpose: OtpPurpose): EmailOtpType {
-  return purpose === 'signup' ? 'signup' : 'email'
+function toOtpType(_purpose: OtpPurpose): EmailOtpType {
+  return 'signup'
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -123,17 +123,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       throw new Error(error.message)
     }
-
-    await supabase.auth.signOut()
-
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: normalized,
-      options: { shouldCreateUser: false },
-    })
-
-    if (otpError) {
-      throw new Error(otpError.message)
-    }
   }, [])
 
   const verifyOtp = useCallback(async (email: string, token: string, purpose: OtpPurpose) => {
@@ -164,22 +153,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Supabase is not configured. Add your credentials to .env.')
     }
 
-    const normalized = normalizeEmail(email)
-
-    if (purpose === 'signup') {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: normalized,
-      })
-      if (error) {
-        throw new Error(error.message)
-      }
-      return
+    if (purpose !== 'signup') {
+      throw new Error('Verification codes are only used when creating an account.')
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const normalized = normalizeEmail(email)
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
       email: normalized,
-      options: { shouldCreateUser: false },
     })
 
     if (error) {

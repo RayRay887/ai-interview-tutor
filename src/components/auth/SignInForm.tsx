@@ -19,7 +19,7 @@ export function SignInForm({ onSuccess, initialMode = 'signin' }: SignInFormProp
 
   const [mode, setMode] = useState<AuthMode>(initialMode)
   const [step, setStep] = useState<AuthStep>('credentials')
-  const [otpPurpose, setOtpPurpose] = useState<OtpPurpose>('signin')
+  const [otpPurpose] = useState<OtpPurpose>('signup')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -57,13 +57,12 @@ export function SignInForm({ onSuccess, initialMode = 'signin' }: SignInFormProp
     try {
       if (mode === 'signup') {
         await signUp(name, email, password)
-        setOtpPurpose('signup')
+        setStep('otp')
+        setOtp('')
       } else {
         await signIn(email, password)
-        setOtpPurpose('signin')
+        onSuccess?.()
       }
-      setStep('otp')
-      setOtp('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
@@ -120,8 +119,8 @@ export function SignInForm({ onSuccess, initialMode = 'signin' }: SignInFormProp
           {step === 'otp'
             ? `We sent a 6-digit code to ${email}`
             : mode === 'signin'
-              ? 'Enter your email and password to continue.'
-              : 'Create an account with your email and password.'}
+              ? 'Enter your email and password to sign in.'
+              : 'Create an account, then verify with the 6-digit code we email you.'}
         </p>
       </div>
 
@@ -229,7 +228,7 @@ export function SignInForm({ onSuccess, initialMode = 'signin' }: SignInFormProp
             disabled={isSubmitting}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-blue/25 transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {isSubmitting ? 'Please wait…' : 'Continue'}
+            {isSubmitting ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Continue'}
             {!isSubmitting && <ArrowRight className="h-4 w-4" />}
           </button>
         </form>
@@ -257,7 +256,7 @@ export function SignInForm({ onSuccess, initialMode = 'signin' }: SignInFormProp
             disabled={isSubmitting || otp.replace(/\D/g, '').length !== 6}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-blue/25 transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {isSubmitting ? 'Verifying…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+            {isSubmitting ? 'Verifying…' : 'Create account'}
             {!isSubmitting && <ArrowRight className="h-4 w-4" />}
           </button>
 
