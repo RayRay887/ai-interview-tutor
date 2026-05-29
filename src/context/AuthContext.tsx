@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { isSupabaseConfigured, normalizeEmail, supabase } from '../lib/supabase'
+import { isSupabaseConfigured, normalizeEmail, requireSupabase, supabase } from '../lib/supabase'
 
 export interface SessionUser {
   id: string
@@ -52,14 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || !supabase) {
       setIsLoading(false)
       return
     }
 
     let mounted = true
+    const client = supabase
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    client.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return
       setUser(session?.user ? toSessionUser(session.user) : null)
       setIsLoading(false)
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = client.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ? toSessionUser(session.user) : null)
       setIsLoading(false)
     })
@@ -90,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Please enter your name.')
     }
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await requireSupabase().auth.signUp({
       email: normalized,
       password,
       options: {
@@ -104,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Hold the session until the email code is verified.
     if (data.session) {
-      await supabase.auth.signOut()
+      await requireSupabase().auth.signOut()
     }
   }, [])
 
@@ -115,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const normalized = normalizeEmail(email)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await requireSupabase().auth.signInWithPassword({
       email: normalized,
       password,
     })
@@ -137,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Enter the 6-digit verification code from your email.')
     }
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { error } = await requireSupabase().auth.verifyOtp({
       email: normalized,
       token: code,
       type: toOtpType(purpose),
@@ -159,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const normalized = normalizeEmail(email)
 
-    const { error } = await supabase.auth.resend({
+    const { error } = await requireSupabase().auth.resend({
       type: 'signup',
       email: normalized,
     })
@@ -171,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (isSupabaseConfigured()) {
-      await supabase.auth.signOut()
+      await requireSupabase().auth.signOut()
     }
     setUser(null)
   }, [])
