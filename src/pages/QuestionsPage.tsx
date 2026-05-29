@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { scrollToTop } from '../lib/scrollToTop'
 import { QuestionCard } from '../components/questions/QuestionCard'
+import { PAGE_SIZE, QuestionPagination } from '../components/questions/QuestionPagination'
 import { GradientText } from '../components/ui/GradientText'
 import type { Difficulty } from '../data/questions'
 import { questionCount, questions } from '../data/questions'
@@ -14,6 +15,7 @@ export function QuestionsPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>('All')
   const [difficulty, setDifficulty] = useState<string>('All')
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     scrollToTop()
@@ -33,11 +35,33 @@ export function QuestionsPage() {
     })
   }, [search, category, difficulty])
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, category, difficulty])
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [page, totalPages])
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, page])
+
+  const handlePageChange = (nextPage: number) => {
+    setPage(nextPage)
+    scrollToTop()
+  }
+
   return (
     <main className="relative pt-28 pb-20 sm:pt-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <motion.div
-          className="mb-10 max-w-2xl"
+          className="mb-8 max-w-2xl"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -53,7 +77,7 @@ export function QuestionsPage() {
           </p>
         </motion.div>
 
-        <div className="glass mb-10 flex flex-col gap-4 rounded-2xl border border-white/10 p-4 sm:p-5">
+        <div className="glass mb-8 flex flex-col gap-4 rounded-2xl border border-white/10 p-4 sm:p-5">
           <div className="relative">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-secondary" />
             <input
@@ -90,18 +114,26 @@ export function QuestionsPage() {
               ))}
             </select>
             <span className="flex items-center text-sm text-text-secondary">
-              Showing {filtered.length} of {questionCount}
+              {filtered.length} match{filtered.length === 1 ? '' : 'es'} · {questionCount} total
             </span>
           </div>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          {filtered.map((question, index) => (
-            <QuestionCard key={question.id} question={question} index={index} />
-          ))}
-        </div>
+        {paginated.length > 0 ? (
+          <>
+            <div className="grid gap-6 sm:grid-cols-2">
+              {paginated.map((question, index) => (
+                <QuestionCard key={question.id} question={question} index={index} />
+              ))}
+            </div>
 
-        {filtered.length === 0 && (
+            <QuestionPagination
+              page={page}
+              totalItems={filtered.length}
+              onPageChange={handlePageChange}
+            />
+          </>
+        ) : (
           <p className="py-16 text-center text-text-secondary">
             No problems match your filters. Try a different search.
           </p>
