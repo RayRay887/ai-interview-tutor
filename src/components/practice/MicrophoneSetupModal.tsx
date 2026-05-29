@@ -1,5 +1,6 @@
 import { Mic, Play, Square, Volume2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { unlockAudioPlayback } from '../../lib/audioUnlock'
 
 interface MicrophoneSetupModalProps {
   onConfirm: (deviceId: string) => void
@@ -323,6 +324,7 @@ export function MicrophoneSetupModal({ onConfirm }: MicrophoneSetupModalProps) {
 
   const handleConfirm = () => {
     stopStream()
+    void unlockAudioPlayback()
     onConfirm(selectedDeviceId)
   }
 

@@ -34,6 +34,8 @@ import {
 import { CodeEditor } from './CodeEditor'
 import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
+import { InterviewerPanel } from './InterviewerPanel'
+import { useInterviewSession } from '../../hooks/useInterviewSession'
 
 interface PracticeSessionProps {
   question: Question
@@ -73,6 +75,10 @@ export function PracticeSession({
 
   const isPaused = pauseReason !== null
   const isTimerRunning = !isPaused && remainingSeconds > 0
+
+  const interview = useInterviewSession({
+    question,
+  })
 
   const code = codeByLanguage[language] ?? getStarterCode(question, language)
   const fileName = `${question.slug}.${getLanguageExtension(language)}`
@@ -304,7 +310,7 @@ export function PracticeSession({
 
       <div className="relative min-h-0 flex-1">
         <div
-          className={`grid h-full min-h-0 lg:grid-cols-[minmax(280px,32%)_1fr] ${
+          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,26%)_minmax(0,1fr)_minmax(260px,300px)] ${
             isPaused ? 'pointer-events-none select-none' : ''
           }`}
           aria-hidden={isPaused}
@@ -567,6 +573,15 @@ export function PracticeSession({
               </div>
             </CollapsibleSection>
           </div>
+
+          <InterviewerPanel
+            phase={interview.phase}
+            error={interview.error}
+            isSpeaking={interview.isSpeaking}
+            showPlayButton={interview.playBlocked}
+            onRetry={() => void interview.retryStart()}
+            onPlayIntroduction={() => void interview.playIntroduction()}
+          />
         </div>
 
         {isPaused && (
