@@ -10,6 +10,7 @@ interface CodeEditorProps {
   value: string
   language: CodeLanguage
   onChange: (value: string) => void
+  readOnly?: boolean
 }
 
 function getCodeMirrorLanguage(language: CodeLanguage) {
@@ -55,7 +56,7 @@ const prepifyEditorTheme = EditorView.theme(
   { dark: true },
 )
 
-export function CodeEditor({ value, language, onChange }: CodeEditorProps) {
+export function CodeEditor({ value, language, onChange, readOnly = false }: CodeEditorProps) {
   const extensions = useMemo(
     () => [getCodeMirrorLanguage(language), prepifyEditorTheme, EditorView.lineWrapping],
     [language],
@@ -67,6 +68,8 @@ export function CodeEditor({ value, language, onChange }: CodeEditorProps) {
       theme={vscodeDark}
       extensions={extensions}
       onChange={onChange}
+      readOnly={readOnly}
+      editable={!readOnly}
       basicSetup={{
         lineNumbers: true,
         foldGutter: false,
