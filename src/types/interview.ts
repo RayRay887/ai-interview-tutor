@@ -14,6 +14,7 @@ export interface InterviewQuestionContext {
   description: string
   difficulty: string
   category: string
+  constraints?: string[]
 }
 
 export function toInterviewQuestionContext(question: Question): InterviewQuestionContext {
@@ -22,7 +23,15 @@ export function toInterviewQuestionContext(question: Question): InterviewQuestio
     description: question.description,
     difficulty: question.difficulty,
     category: question.category,
+    constraints: question.constraints,
   }
 }
 
-export type InterviewPhase = 'idle' | 'starting' | 'ready' | 'thinking' | 'speaking' | 'error'
+export type InterviewPhase =
+  | 'idle'
+  | 'starting'
+  | 'ready'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'error'

@@ -14,6 +14,7 @@ export interface Question {
   featured?: boolean
   starterCode: string
   examples: { input: string; output: string }[]
+  hiddenTests?: { input: string; output: string }[]
   constraints?: string[]
 }
 
@@ -29,14 +30,19 @@ export const questions: Question[] = [
     featured: true,
     starterCode: "def pair_target_indices(values: list[int], target: int) -> list[int]:\n    # Your code here\n    pass",
     examples: [
-      { input: "values = [3, 8, 1, 6], target = 9", output: "[0, 3]" },
+      { input: "values = [2, 7, 11, 15], target = 9", output: "[0, 1]" },
       { input: "values = [4, 5, 1], target = 6", output: "[1, 2]" }
     ],
-    constraints: [
-      '2 ≤ nums.length ≤ 10⁴',
-      'Each input has exactly one solution.',
-      'You may not use the same element twice.',
-    ],
+    hiddenTests: [
+      { input: "values = [3, 3], target = 6", output: "[0, 1]" },
+      { input: "values = [-1, -2, -3, -4], target = -6", output: "[1, 3]" },
+      { input: "values = [0, 4, 3, 0], target = 0", output: "[0, 3]" },
+      { input: "values = [1, 2, 3, 4, 5], target = 9", output: "[3, 4]" },
+      { input: "values = [5, 5], target = 10", output: "[0, 1]" },
+      { input: "values = [-3, 4, 3, 90], target = 0", output: "[0, 2]" },
+      { input: "values = [2, 7, 11, 15], target = 26", output: "[2, 3]" },
+      { input: "values = [1, 3, 4, 2], target = 6", output: "[2, 3]" }
+    ]
   },
   {
     id: '2',
@@ -49,12 +55,17 @@ export const questions: Question[] = [
     featured: true,
     starterCode: "def zero_sum_triplets(values: list[int]) -> list[list[int]]:\n    # Your code here\n    pass",
     examples: [
-      { input: "values = [-1, 0, 1, 2, -1, -4]", output: "[[-1,-1,2],[-1,0,1]]" }
+      { input: "values = [-1, 0, 1, 2, -1, -4]", output: "[[-1,-1,2],[-1,0,1]]" },
+      { input: "values = [0, 0, 0]", output: "[[0,0,0]]" }
     ],
-    constraints: [
-      '3 ≤ nums.length ≤ 3000',
-      'All triplets in the answer must be unique.',
-    ],
+    hiddenTests: [
+      { input: "values = [0, 0, 0]", output: "[[0,0,0]]" },
+      { input: "values = [-2, 0, 1, 1, 2]", output: "[[-2,0,2],[-2,1,1]]" },
+      { input: "values = [1, -1, 0]", output: "[[-1,0,1]]" },
+      { input: "values = [-1, 0, 1, 0]", output: "[[-1,0,1]]" },
+      { input: "values = [-2, 1, 1, 0]", output: "[[-2,1,1]]" },
+      { input: "values = [0, 0, 0, 0]", output: "[[0,0,0]]" }
+    ]
   },
   {
     id: '3',
@@ -64,14 +75,22 @@ export const questions: Question[] = [
     difficulty: "Easy",
     category: "Arrays & Hashmaps",
     duration: "20 min",
-    starterCode: "def duplicate_value_detector():\n    # Your code here\n    pass",
+    featured: true,
+    starterCode: "def duplicate_value_detector(values: list[int]) -> bool:\n    # Your code here\n    pass",
     examples: [
-      { input: "values = [1, 2, 3, 1]", output: "true" }
+      { input: "values = [1, 2, 3, 1]", output: "true" },
+      { input: "values = [1, 2, 3, 4]", output: "false" }
     ],
-    constraints: [
-      '1 ≤ s.length ≤ 10⁴',
-      's consists of parentheses only: ()[]{}',
-    ],
+    hiddenTests: [
+      { input: "values = [1, 2, 3, 4]", output: "false" },
+      { input: "values = [1, 1]", output: "true" },
+      { input: "values = [1]", output: "false" },
+      { input: "values = [5, 5, 5]", output: "true" },
+      { input: "values = [-1, -2, -3, -1]", output: "true" },
+      { input: "values = []", output: "false" },
+      { input: "values = [0, 0]", output: "true" },
+      { input: "values = [10, 20, 30, 40, 50]", output: "false" }
+    ]
   },
   {
     id: '4',
@@ -84,11 +103,7 @@ export const questions: Question[] = [
     starterCode: "def letter_multiset_match():\n    # Your code here\n    pass",
     examples: [
       { input: "a = \"listen\", b = \"silent\"", output: "true" }
-    ],
-    constraints: [
-      '0 ≤ s.length ≤ 5 × 10⁴',
-      's consists of English letters, digits, symbols, and spaces.',
-    ],
+    ]
   },
   {
     id: '5',
@@ -101,12 +116,7 @@ export const questions: Question[] = [
     starterCode: "def anagram_buckets():\n    # Your code here\n    pass",
     examples: [
       { input: "words = [\"eat\",\"tea\",\"tan\",\"ate\",\"nat\",\"bat\"]", output: "[[\"bat\"],[\"nat\",\"tan\"],[\"ate\",\"eat\",\"tea\"]]" }
-    ],
-    constraints: [
-      '1 ≤ intervals.length ≤ 10⁴',
-      'intervals[i].length == 2',
-      '0 ≤ start_i ≤ end_i ≤ 10⁴',
-    ],
+    ]
   },
   {
     id: '6',
@@ -119,11 +129,7 @@ export const questions: Question[] = [
     starterCode: "def top_frequency_values():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1,1,1,2,2,3], k = 2", output: "[1, 2]" }
-    ],
-    constraints: [
-      'The number of nodes in the list is in the range [0, 5000].',
-      '-5000 ≤ Node.val ≤ 5000',
-    ],
+    ]
   },
   {
     id: '7',
@@ -133,14 +139,22 @@ export const questions: Question[] = [
     difficulty: "Medium",
     category: "Arrays & Hashmaps",
     duration: "35 min",
-    starterCode: "def product_except_self():\n    # Your code here\n    pass",
+    featured: true,
+    starterCode: "def product_except_self(values: list[int]) -> list[int]:\n    # Your code here\n    pass",
     examples: [
-      { input: "values = [1, 2, 3, 4]", output: "[24, 12, 8, 6]" }
+      { input: "values = [1, 2, 3, 4]", output: "[24, 12, 8, 6]" },
+      { input: "values = [2, 3, 4, 5]", output: "[60, 40, 30, 24]" }
     ],
-    constraints: [
-      'The number of nodes in the tree is in the range [0, 2000].',
-      '-1000 ≤ Node.val ≤ 1000',
-    ],
+    hiddenTests: [
+      { input: "values = [1, 1]", output: "[1, 1]" },
+      { input: "values = [0, 1, 2]", output: "[2, 0, 0]" },
+      { input: "values = [-1, 1, 0, -3, 3]", output: "[0, 0, 9, 0, 0]" },
+      { input: "values = [2, 3]", output: "[3, 2]" },
+      { input: "values = [0, 0]", output: "[0, 0]" },
+      { input: "values = [1, 0, 3, 4]", output: "[0, 12, 0, 0]" },
+      { input: "values = [-1, -2, -3]", output: "[6, 3, 2]" },
+      { input: "values = [5, 1, 2, 3, 4]", output: "[24, 120, 60, 40, 30]" }
+    ]
   },
   {
     id: '8',
@@ -150,15 +164,22 @@ export const questions: Question[] = [
     difficulty: "Medium",
     category: "Arrays & Hashmaps",
     duration: "35 min",
-    starterCode: "def longest_consecutive_run():\n    # Your code here\n    pass",
+    featured: true,
+    starterCode: "def longest_consecutive_run(values: list[int]) -> int:\n    # Your code here\n    pass",
     examples: [
-      { input: "values = [100, 4, 200, 1, 3, 2]", output: "4" }
+      { input: "values = [100, 4, 200, 1, 3, 2]", output: "4" },
+      { input: "values = [0, 3, 7, 2, 5, 8, 4, 6, 0, 1]", output: "9" }
     ],
-    constraints: [
-      '1 ≤ coins.length ≤ 12',
-      '1 ≤ coins[i] ≤ 2³¹ − 1',
-      '0 ≤ amount ≤ 10⁴',
-    ],
+    hiddenTests: [
+      { input: "values = [1, 2, 0, 1]", output: "3" },
+      { input: "values = []", output: "0" },
+      { input: "values = [1]", output: "1" },
+      { input: "values = [8, 1, 9, 3, 2]", output: "3" },
+      { input: "values = [0, 3, 7, 2, 5, 8, 4, 6, 0, 1]", output: "9" },
+      { input: "values = [100, 4, 200, 1, 3, 2]", output: "4" },
+      { input: "values = [9, 1, 4, 7, 3, -1, 0, 5, 8, -2, 6]", output: "7" },
+      { input: "values = [10, 30, 20]", output: "1" }
+    ]
   },
   {
     id: '9',
@@ -171,13 +192,7 @@ export const questions: Question[] = [
     starterCode: "def subarray_sum_target():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1, 1, 1], k = 2", output: "2" }
-    ],
-    constraints: [
-      'm == grid.length',
-      'n == grid[i].length',
-      '1 ≤ m, n ≤ 300',
-      'grid[i][j] is "0" or "1".',
-    ],
+    ]
   },
   {
     id: '10',
@@ -190,10 +205,7 @@ export const questions: Question[] = [
     starterCode: "def overlap_merger():\n    # Your code here\n    pass",
     examples: [
       { input: "intervals = [[1,3],[2,6],[8,10],[15,18]]", output: "[[1,6],[8,10],[15,18]]" }
-    ],
-    constraints: [
-      '1 ≤ n ≤ 45',
-    ],
+    ]
   },
   {
     id: '11',
@@ -206,7 +218,7 @@ export const questions: Question[] = [
     starterCode: "def rotated_array_minimum():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [3, 4, 5, 1, 2]", output: "1" }
-    ],
+    ]
   },
   {
     id: '12',
@@ -219,7 +231,7 @@ export const questions: Question[] = [
     starterCode: "def search_rotated_sorted_array():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [4,5,6,7,0,1,2], target = 0", output: "4" }
-    ],
+    ]
   },
   {
     id: '13',
@@ -229,10 +241,22 @@ export const questions: Question[] = [
     difficulty: "Medium",
     category: "Arrays & Hashmaps",
     duration: "35 min",
-    starterCode: "def widest_container_area():\n    # Your code here\n    pass",
+    featured: true,
+    starterCode: "def widest_container_area(heights: list[int]) -> int:\n    # Your code here\n    pass",
     examples: [
-      { input: "heights = [1,8,6,2,5,4,8,3,7]", output: "49" }
+      { input: "heights = [1,8,6,2,5,4,8,3,7]", output: "49" },
+      { input: "heights = [1, 1]", output: "1" }
     ],
+    hiddenTests: [
+      { input: "heights = [1, 1]", output: "1" },
+      { input: "heights = [4, 3, 2, 1, 4]", output: "16" },
+      { input: "heights = [1, 2, 1]", output: "2" },
+      { input: "heights = [2, 3, 4, 5, 18, 17, 6]", output: "17" },
+      { input: "heights = [1, 8, 6, 2, 5, 4, 8, 3, 7]", output: "49" },
+      { input: "heights = [5, 5, 5, 5]", output: "15" },
+      { input: "heights = [6, 4, 2, 12, 10]", output: "24" },
+      { input: "heights = [1, 2, 4, 3]", output: "4" }
+    ]
   },
   {
     id: '14',
@@ -245,7 +269,7 @@ export const questions: Question[] = [
     starterCode: "def rain_trap_volume():\n    # Your code here\n    pass",
     examples: [
       { input: "heights = [0,1,0,2,1,0,1,3,2,1,2,1]", output: "6" }
-    ],
+    ]
   },
   {
     id: '15',
@@ -255,10 +279,22 @@ export const questions: Question[] = [
     difficulty: "Easy",
     category: "Arrays & Hashmaps",
     duration: "20 min",
-    starterCode: "def best_single_trade_profit():\n    # Your code here\n    pass",
+    featured: true,
+    starterCode: "def best_single_trade_profit(prices: list[int]) -> int:\n    # Your code here\n    pass",
     examples: [
-      { input: "prices = [7, 1, 5, 3, 6, 4]", output: "5" }
+      { input: "prices = [7, 1, 5, 3, 6, 4]", output: "5" },
+      { input: "prices = [7, 6, 4, 3, 1]", output: "0" }
     ],
+    hiddenTests: [
+      { input: "prices = [7, 6, 4, 3, 1]", output: "0" },
+      { input: "prices = [2, 4, 1]", output: "2" },
+      { input: "prices = [1, 2]", output: "1" },
+      { input: "prices = [3, 3, 3]", output: "0" },
+      { input: "prices = [2, 1, 2, 1, 0, 1, 2]", output: "2" },
+      { input: "prices = [1]", output: "0" },
+      { input: "prices = [3, 2, 6, 5, 0, 3]", output: "4" },
+      { input: "prices = [1, 2, 3, 4, 5]", output: "4" }
+    ]
   },
   {
     id: '16',
@@ -268,10 +304,22 @@ export const questions: Question[] = [
     difficulty: "Medium",
     category: "Arrays & Hashmaps",
     duration: "35 min",
-    starterCode: "def maximum_subarray_sum():\n    # Your code here\n    pass",
+    featured: true,
+    starterCode: "def maximum_subarray_sum(values: list[int]) -> int:\n    # Your code here\n    pass",
     examples: [
-      { input: "values = [-2, 1, -3, 4, -1, 2, 1, -5, 4]", output: "6" }
+      { input: "values = [-2, 1, -3, 4, -1, 2, 1, -5, 4]", output: "6" },
+      { input: "values = [1]", output: "1" }
     ],
+    hiddenTests: [
+      { input: "values = [1]", output: "1" },
+      { input: "values = [-1]", output: "-1" },
+      { input: "values = [5, 4, -1, 7, 8]", output: "23" },
+      { input: "values = [-2, -1]", output: "-1" },
+      { input: "values = [-2, 1, -3, 4, -1, 2, 1, -5, 4]", output: "6" },
+      { input: "values = [0, 0, 0]", output: "0" },
+      { input: "values = [8, -2, 6, -1, 4]", output: "15" },
+      { input: "values = [-1, -2, -3]", output: "-1" }
+    ]
   },
   {
     id: '17',
@@ -284,7 +332,7 @@ export const questions: Question[] = [
     starterCode: "def majority_vote_threshold():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [3, 2, 3]", output: "3" }
-    ],
+    ]
   },
   {
     id: '18',
@@ -297,7 +345,7 @@ export const questions: Question[] = [
     starterCode: "def shift_zeros_to_end():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [0, 1, 0, 3, 12]", output: "[1, 3, 12, 0, 0]" }
-    ],
+    ]
   },
   {
     id: '19',
@@ -310,7 +358,7 @@ export const questions: Question[] = [
     starterCode: "def sorted_squares():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [-4, -1, 0, 3, 10]", output: "[0, 1, 9, 16, 100]" }
-    ],
+    ]
   },
   {
     id: '20',
@@ -323,7 +371,7 @@ export const questions: Question[] = [
     starterCode: "def dutch_flag_sort():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [2, 0, 2, 1, 1, 0]", output: "[0, 0, 1, 1, 2, 2]" }
-    ],
+    ]
   },
   {
     id: '21',
@@ -339,6 +387,16 @@ export const questions: Question[] = [
       { input: "text = \"()[]{}\"", output: "true" },
       { input: "text = \"(]\"", output: "false" }
     ],
+    hiddenTests: [
+      { input: "text = \"\"", output: "true" },
+      { input: "text = \"([{}])\"", output: "true" },
+      { input: "text = \"([)]\"", output: "false" },
+      { input: "text = \"{[]}\"", output: "true" },
+      { input: "text = \"(((\"", output: "false" },
+      { input: "text = \"()\"", output: "true" },
+      { input: "text = \"(]\"", output: "false" },
+      { input: "text = \"{[()()]}\"", output: "true" }
+    ]
   },
   {
     id: '22',
@@ -351,7 +409,7 @@ export const questions: Question[] = [
     starterCode: "def minimum_stack():\n    # Your code here\n    pass",
     examples: [
       { input: "push(2), push(0), getMin()", output: "0" }
-    ],
+    ]
   },
   {
     id: '23',
@@ -364,7 +422,7 @@ export const questions: Question[] = [
     starterCode: "def postfix_evaluator():\n    # Your code here\n    pass",
     examples: [
       { input: "tokens = [\"2\",\"1\",\"+\",\"3\",\"*\"]", output: "9" }
-    ],
+    ]
   },
   {
     id: '24',
@@ -377,7 +435,7 @@ export const questions: Question[] = [
     starterCode: "def warmup_day_counts():\n    # Your code here\n    pass",
     examples: [
       { input: "temps = [73, 74, 75, 71, 69, 72, 76, 73]", output: "[1,1,4,2,1,1,0,0]" }
-    ],
+    ]
   },
   {
     id: '25',
@@ -390,7 +448,7 @@ export const questions: Question[] = [
     starterCode: "def nested_string_decoder():\n    # Your code here\n    pass",
     examples: [
       { input: "encoded = \"3[a2[c]]\"", output: "\"accaccacc\"" }
-    ],
+    ]
   },
   {
     id: '26',
@@ -403,7 +461,7 @@ export const questions: Question[] = [
     starterCode: "def largest_histogram_area():\n    # Your code here\n    pass",
     examples: [
       { input: "heights = [2, 1, 5, 6, 2, 3]", output: "10" }
-    ],
+    ]
   },
   {
     id: '27',
@@ -416,7 +474,7 @@ export const questions: Question[] = [
     starterCode: "def expression_calculator():\n    # Your code here\n    pass",
     examples: [
       { input: "expr = \"1 + (2 + 3)\"", output: "6" }
-    ],
+    ]
   },
   {
     id: '28',
@@ -432,6 +490,16 @@ export const questions: Question[] = [
       { input: "text = \"abcabcbb\"", output: "3" },
       { input: "text = \"bbbbb\"", output: "1" }
     ],
+    hiddenTests: [
+      { input: "text = \"\"", output: "0" },
+      { input: "text = \"abc\"", output: "3" },
+      { input: "text = \"pwwkew\"", output: "3" },
+      { input: "text = \"aab\"", output: "2" },
+      { input: "text = \"dvdf\"", output: "3" },
+      { input: "text = \"tmmzuxt\"", output: "5" },
+      { input: "text = \"abcdefg\"", output: "7" },
+      { input: "text = \"abba\"", output: "2" }
+    ]
   },
   {
     id: '29',
@@ -444,7 +512,7 @@ export const questions: Question[] = [
     starterCode: "def window_character_replacement():\n    # Your code here\n    pass",
     examples: [
       { input: "text = \"AABABBA\", k = 1", output: "4" }
-    ],
+    ]
   },
   {
     id: '30',
@@ -457,7 +525,7 @@ export const questions: Question[] = [
     starterCode: "def permutation_window_check():\n    # Your code here\n    pass",
     examples: [
       { input: "s1 = \"ab\", s2 = \"eidbaooo\"", output: "true" }
-    ],
+    ]
   },
   {
     id: '31',
@@ -470,7 +538,7 @@ export const questions: Question[] = [
     starterCode: "def minimum_cover_substring():\n    # Your code here\n    pass",
     examples: [
       { input: "s = \"ADOBECODEBANC\", t = \"ABC\"", output: "\"BANC\"" }
-    ],
+    ]
   },
   {
     id: '32',
@@ -483,7 +551,7 @@ export const questions: Question[] = [
     starterCode: "def sliding_window_peak():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1,3,-1,-3,5,3,6,7], k = 3", output: "[3,3,5,5,6,7]" }
-    ],
+    ]
   },
   {
     id: '33',
@@ -496,7 +564,7 @@ export const questions: Question[] = [
     starterCode: "def min_subarray_sum_at_least_k():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [2, 3, 1, 2, 4, 3], target = 7", output: "2" }
-    ],
+    ]
   },
   {
     id: '34',
@@ -509,7 +577,7 @@ export const questions: Question[] = [
     starterCode: "def reverse_singly_chain():\n    # Your code here\n    pass",
     examples: [
       { input: "chain = [1, 2, 3, 4, 5]", output: "[5, 4, 3, 2, 1]" }
-    ],
+    ]
   },
   {
     id: '35',
@@ -522,7 +590,7 @@ export const questions: Question[] = [
     starterCode: "def merge_two_sorted_chains():\n    # Your code here\n    pass",
     examples: [
       { input: "a = [1,2,4], b = [1,3,4]", output: "[1,1,2,3,4,4]" }
-    ],
+    ]
   },
   {
     id: '36',
@@ -535,7 +603,7 @@ export const questions: Question[] = [
     starterCode: "def cycle_entry_finder():\n    # Your code here\n    pass",
     examples: [
       { input: "chain with cycle at index 1", output: "node at index 1" }
-    ],
+    ]
   },
   {
     id: '37',
@@ -548,7 +616,7 @@ export const questions: Question[] = [
     starterCode: "def nth_node_from_tail():\n    # Your code here\n    pass",
     examples: [
       { input: "chain = [1,2,3,4,5], n = 2", output: "[1,2,3,5]" }
-    ],
+    ]
   },
   {
     id: '38',
@@ -561,7 +629,7 @@ export const questions: Question[] = [
     starterCode: "def digit_list_addition():\n    # Your code here\n    pass",
     examples: [
       { input: "a = [2,4,3], b = [5,6,4]", output: "[7,0,8]" }
-    ],
+    ]
   },
   {
     id: '39',
@@ -574,7 +642,7 @@ export const questions: Question[] = [
     starterCode: "def reorder_half_interleave():\n    # Your code here\n    pass",
     examples: [
       { input: "chain = [1,2,3,4]", output: "[1,4,2,3]" }
-    ],
+    ]
   },
   {
     id: '40',
@@ -587,7 +655,7 @@ export const questions: Question[] = [
     starterCode: "def merge_k_sorted_chains():\n    # Your code here\n    pass",
     examples: [
       { input: "lists = [[1,4,5],[1,3,4],[2,6]]", output: "[1,1,2,3,4,4,5,6]" }
-    ],
+    ]
   },
   {
     id: '41',
@@ -600,7 +668,7 @@ export const questions: Question[] = [
     starterCode: "def mirror_binary_tree():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [4,2,7,1,3,6,9]", output: "[4,7,2,9,6,3,1]" }
-    ],
+    ]
   },
   {
     id: '42',
@@ -613,7 +681,7 @@ export const questions: Question[] = [
     starterCode: "def tree_depth_measure():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [3,9,20,null,null,15,7]", output: "3" }
-    ],
+    ]
   },
   {
     id: '43',
@@ -626,7 +694,7 @@ export const questions: Question[] = [
     starterCode: "def symmetric_tree_check():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [1,2,2,3,4,4,3]", output: "true" }
-    ],
+    ]
   },
   {
     id: '44',
@@ -639,7 +707,7 @@ export const questions: Question[] = [
     starterCode: "def level_order_layers():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [3,9,20,null,null,15,7]", output: "[[3],[9,20],[15,7]]" }
-    ],
+    ]
   },
   {
     id: '45',
@@ -652,7 +720,7 @@ export const questions: Question[] = [
     starterCode: "def search_tree_validator():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [2,1,3]", output: "true" }
-    ],
+    ]
   },
   {
     id: '46',
@@ -665,7 +733,7 @@ export const questions: Question[] = [
     starterCode: "def kth_smallest_in_search_tree():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [3,1,4,null,2], k = 1", output: "1" }
-    ],
+    ]
   },
   {
     id: '47',
@@ -678,7 +746,7 @@ export const questions: Question[] = [
     starterCode: "def land_region_counter():\n    # Your code here\n    pass",
     examples: [
       { input: "grid = [[\"1\",\"1\",\"0\"],[\"0\",\"1\",\"0\"],[\"1\",\"0\",\"1\"]]", output: "3" }
-    ],
+    ]
   },
   {
     id: '48',
@@ -691,7 +759,7 @@ export const questions: Question[] = [
     starterCode: "def course_prerequisite_order():\n    # Your code here\n    pass",
     examples: [
       { input: "numCourses = 2, prereqs = [[1,0]]", output: "[0, 1]" }
-    ],
+    ]
   },
   {
     id: '49',
@@ -704,7 +772,7 @@ export const questions: Question[] = [
     starterCode: "def graph_connectivity_check():\n    # Your code here\n    pass",
     examples: [
       { input: "n = 5, edges = [[0,1],[1,2],[2,3],[3,4]]", output: "true" }
-    ],
+    ]
   },
   {
     id: '50',
@@ -717,7 +785,7 @@ export const questions: Question[] = [
     starterCode: "def rot_spread_minutes():\n    # Your code here\n    pass",
     examples: [
       { input: "grid = [[2,1,1],[1,1,0],[0,1,1]]", output: "4" }
-    ],
+    ]
   },
   {
     id: '51',
@@ -730,7 +798,7 @@ export const questions: Question[] = [
     starterCode: "def word_ladder_length():\n    # Your code here\n    pass",
     examples: [
       { input: "begin = \"hit\", end = \"cog\", dict = [\"hot\",\"dot\",\"dog\",\"lot\",\"log\",\"cog\"]", output: "5" }
-    ],
+    ]
   },
   {
     id: '52',
@@ -744,7 +812,7 @@ export const questions: Question[] = [
     examples: [
       { input: "n = 3", output: "3" },
       { input: "n = 5", output: "8" }
-    ],
+    ]
   },
   {
     id: '53',
@@ -757,7 +825,7 @@ export const questions: Question[] = [
     starterCode: "def house_robbery_max():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [2, 7, 9, 3, 1]", output: "12" }
-    ],
+    ]
   },
   {
     id: '54',
@@ -770,7 +838,7 @@ export const questions: Question[] = [
     starterCode: "def coin_minimum_count():\n    # Your code here\n    pass",
     examples: [
       { input: "coins = [1, 2, 5], amount = 11", output: "3" }
-    ],
+    ]
   },
   {
     id: '55',
@@ -783,7 +851,7 @@ export const questions: Question[] = [
     starterCode: "def dictionary_word_split():\n    # Your code here\n    pass",
     examples: [
       { input: "s = \"leetcode\", dict = [\"leet\",\"code\"]", output: "true" }
-    ],
+    ]
   },
   {
     id: '56',
@@ -796,7 +864,7 @@ export const questions: Question[] = [
     starterCode: "def longest_increasing_subsequence():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [10, 9, 2, 5, 3, 7, 101, 18]", output: "4" }
-    ],
+    ]
   },
   {
     id: '57',
@@ -809,7 +877,7 @@ export const questions: Question[] = [
     starterCode: "def equal_partition_subset():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1, 5, 11, 5]", output: "true" }
-    ],
+    ]
   },
   {
     id: '58',
@@ -822,7 +890,7 @@ export const questions: Question[] = [
     starterCode: "def edit_distance():\n    # Your code here\n    pass",
     examples: [
       { input: "word1 = \"horse\", word2 = \"ros\"", output: "3" }
-    ],
+    ]
   },
   {
     id: '59',
@@ -835,7 +903,7 @@ export const questions: Question[] = [
     starterCode: "def grid_path_count():\n    # Your code here\n    pass",
     examples: [
       { input: "rows = 3, cols = 7", output: "28" }
-    ],
+    ]
   },
   {
     id: '60',
@@ -848,7 +916,7 @@ export const questions: Question[] = [
     starterCode: "def all_subsets_generator():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1, 2, 3]", output: "[[],[1],[2],[1,2],[3],[1,3],[2,3],[1,2,3]]" }
-    ],
+    ]
   },
   {
     id: '61',
@@ -861,7 +929,7 @@ export const questions: Question[] = [
     starterCode: "def permutation_builder():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1, 2, 3]", output: "[[1,2,3],[1,3,2],[2,1,3],...]" }
-    ],
+    ]
   },
   {
     id: '62',
@@ -874,7 +942,7 @@ export const questions: Question[] = [
     starterCode: "def combination_target_sum():\n    # Your code here\n    pass",
     examples: [
       { input: "candidates = [2,3,6,7], target = 7", output: "[[2,2,3],[7]]" }
-    ],
+    ]
   },
   {
     id: '63',
@@ -887,7 +955,7 @@ export const questions: Question[] = [
     starterCode: "def grid_word_path():\n    # Your code here\n    pass",
     examples: [
       { input: "board = [[\"A\",\"B\"],[\"C\",\"D\"]], word = \"ABDC\"", output: "false" }
-    ],
+    ]
   },
   {
     id: '64',
@@ -900,7 +968,7 @@ export const questions: Question[] = [
     starterCode: "def n_queens_layout():\n    # Your code here\n    pass",
     examples: [
       { input: "n = 4", output: "2 distinct boards" }
-    ],
+    ]
   },
   {
     id: '65',
@@ -913,7 +981,7 @@ export const questions: Question[] = [
     starterCode: "def kth_largest_picker():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [3,2,1,5,6,4], k = 2", output: "5" }
-    ],
+    ]
   },
   {
     id: '66',
@@ -926,7 +994,7 @@ export const questions: Question[] = [
     starterCode: "def closest_points_to_origin():\n    # Your code here\n    pass",
     examples: [
       { input: "points = [[1,3],[-2,2]], k = 1", output: "[[-2,2]]" }
-    ],
+    ]
   },
   {
     id: '67',
@@ -939,7 +1007,7 @@ export const questions: Question[] = [
     starterCode: "def task_cooldown_schedule():\n    # Your code here\n    pass",
     examples: [
       { input: "tasks = [\"A\",\"A\",\"A\",\"B\",\"B\",\"B\"], n = 2", output: "8" }
-    ],
+    ]
   },
   {
     id: '68',
@@ -952,7 +1020,7 @@ export const questions: Question[] = [
     starterCode: "def running_median_stream():\n    # Your code here\n    pass",
     examples: [
       { input: "add(1), add(2), findMedian(), add(3)", output: "1.5 then 2" }
-    ],
+    ]
   },
   {
     id: '69',
@@ -965,7 +1033,7 @@ export const questions: Question[] = [
     starterCode: "def sorted_array_lookup():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [-1,0,3,5,9,12], target = 9", output: "4" }
-    ],
+    ]
   },
   {
     id: '70',
@@ -978,7 +1046,7 @@ export const questions: Question[] = [
     starterCode: "def matrix_sorted_search():\n    # Your code here\n    pass",
     examples: [
       { input: "matrix = [[1,4,7],[10,11,16]], target = 10", output: "true" }
-    ],
+    ]
   },
   {
     id: '71',
@@ -991,7 +1059,7 @@ export const questions: Question[] = [
     starterCode: "def banana_eating_pace():\n    # Your code here\n    pass",
     examples: [
       { input: "piles = [3,6,7,11], h = 8", output: "4" }
-    ],
+    ]
   },
   {
     id: '72',
@@ -1004,7 +1072,7 @@ export const questions: Question[] = [
     starterCode: "def median_of_two_sorted_lists():\n    # Your code here\n    pass",
     examples: [
       { input: "a = [1,3], b = [2]", output: "2.0" }
-    ],
+    ]
   },
   {
     id: '73',
@@ -1017,7 +1085,7 @@ export const questions: Question[] = [
     starterCode: "def reach_end_jump_game():\n    # Your code here\n    pass",
     examples: [
       { input: "jumps = [2, 3, 1, 1, 4]", output: "true" }
-    ],
+    ]
   },
   {
     id: '74',
@@ -1030,7 +1098,7 @@ export const questions: Question[] = [
     starterCode: "def minimum_reach_jumps():\n    # Your code here\n    pass",
     examples: [
       { input: "jumps = [2, 3, 1, 1, 4]", output: "2" }
-    ],
+    ]
   },
   {
     id: '75',
@@ -1043,7 +1111,7 @@ export const questions: Question[] = [
     starterCode: "def gas_station_circuit():\n    # Your code here\n    pass",
     examples: [
       { input: "gas = [1,2,3,4,5], cost = [3,4,5,1,2]", output: "3" }
-    ],
+    ]
   },
   {
     id: '76',
@@ -1056,7 +1124,7 @@ export const questions: Question[] = [
     starterCode: "def palindrome_phrase_check():\n    # Your code here\n    pass",
     examples: [
       { input: "phrase = \"A man, a plan, a canal: Panama\"", output: "true" }
-    ],
+    ]
   },
   {
     id: '77',
@@ -1069,7 +1137,7 @@ export const questions: Question[] = [
     starterCode: "def longest_palindrome_length():\n    # Your code here\n    pass",
     examples: [
       { input: "text = \"abccccdd\"", output: "7" }
-    ],
+    ]
   },
   {
     id: '78',
@@ -1082,7 +1150,7 @@ export const questions: Question[] = [
     starterCode: "def needle_in_haystack():\n    # Your code here\n    pass",
     examples: [
       { input: "haystack = \"sadbutsad\", needle = \"sad\"", output: "0" }
-    ],
+    ]
   },
   {
     id: '79',
@@ -1095,7 +1163,7 @@ export const questions: Question[] = [
     starterCode: "def digit_array_plus_one():\n    # Your code here\n    pass",
     examples: [
       { input: "digits = [1, 2, 3]", output: "[1, 2, 4]" }
-    ],
+    ]
   },
   {
     id: '80',
@@ -1108,7 +1176,7 @@ export const questions: Question[] = [
     starterCode: "def integer_square_root():\n    # Your code here\n    pass",
     examples: [
       { input: "x = 8", output: "2" }
-    ],
+    ]
   },
   {
     id: '81',
@@ -1121,7 +1189,7 @@ export const questions: Question[] = [
     starterCode: "def happy_number_cycle():\n    # Your code here\n    pass",
     examples: [
       { input: "n = 19", output: "true" }
-    ],
+    ]
   },
   {
     id: '82',
@@ -1134,7 +1202,7 @@ export const questions: Question[] = [
     starterCode: "def lone_element_finder():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [4, 1, 2, 1, 2]", output: "4" }
-    ],
+    ]
   },
   {
     id: '83',
@@ -1147,7 +1215,7 @@ export const questions: Question[] = [
     starterCode: "def count_set_bits():\n    # Your code here\n    pass",
     examples: [
       { input: "n = 11", output: "3" }
-    ],
+    ]
   },
   {
     id: '84',
@@ -1160,7 +1228,7 @@ export const questions: Question[] = [
     starterCode: "def missing_sequence_value():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [3, 0, 1]", output: "2" }
-    ],
+    ]
   },
   {
     id: '85',
@@ -1173,7 +1241,7 @@ export const questions: Question[] = [
     starterCode: "def add_without_plus():\n    # Your code here\n    pass",
     examples: [
       { input: "a = 5, b = 3", output: "8" }
-    ],
+    ]
   },
   {
     id: '86',
@@ -1186,7 +1254,7 @@ export const questions: Question[] = [
     starterCode: "def key_value_map_design():\n    # Your code here\n    pass",
     examples: [
       { input: "put(1,1), get(1), remove(1)", output: "1 then null" }
-    ],
+    ]
   },
   {
     id: '87',
@@ -1199,7 +1267,7 @@ export const questions: Question[] = [
     starterCode: "def recent_access_cache():\n    # Your code here\n    pass",
     examples: [
       { input: "capacity = 2, put(1,1), put(2,2), get(1)", output: "1" }
-    ],
+    ]
   },
   {
     id: '88',
@@ -1212,7 +1280,7 @@ export const questions: Question[] = [
     starterCode: "def prefix_word_tree():\n    # Your code here\n    pass",
     examples: [
       { input: "insert(\"apple\"), search(\"app\")", output: "false" }
-    ],
+    ]
   },
   {
     id: '89',
@@ -1225,7 +1293,7 @@ export const questions: Question[] = [
     starterCode: "def hit_counter_window():\n    # Your code here\n    pass",
     examples: [
       { input: "hit(1), hit(2), getHits(300)", output: "2" }
-    ],
+    ]
   },
   {
     id: '90',
@@ -1238,7 +1306,7 @@ export const questions: Question[] = [
     starterCode: "def four_value_target_sum():\n    # Your code here\n    pass",
     examples: [
       { input: "values = [1,0,-1,0,-2,2], target = 0", output: "[[-2,-1,1,2],[-2,0,0,2],[-1,0,0,1]]" }
-    ],
+    ]
   },
   {
     id: '91',
@@ -1251,7 +1319,7 @@ export const questions: Question[] = [
     starterCode: "def sudoku_board_validator():\n    # Your code here\n    pass",
     examples: [
       { input: "partial 9x9 board", output: "true or false" }
-    ],
+    ]
   },
   {
     id: '92',
@@ -1264,7 +1332,7 @@ export const questions: Question[] = [
     starterCode: "def spiral_matrix_walk():\n    # Your code here\n    pass",
     examples: [
       { input: "matrix = [[1,2,3],[4,5,6],[7,8,9]]", output: "[1,2,3,6,9,8,7,4,5]" }
-    ],
+    ]
   },
   {
     id: '93',
@@ -1277,7 +1345,7 @@ export const questions: Question[] = [
     starterCode: "def balanced_parentheses_generator():\n    # Your code here\n    pass",
     examples: [
       { input: "n = 3", output: "[\"((()))\",\"(()())\",\"(())()\",\"()(())\",\"()()()\"]" }
-    ],
+    ]
   },
   {
     id: '94',
@@ -1290,7 +1358,7 @@ export const questions: Question[] = [
     starterCode: "def car_fleet_arrival():\n    # Your code here\n    pass",
     examples: [
       { input: "target = 12, position = [10,8,0,5,3], speed = [2,4,1,1,3]", output: "3" }
-    ],
+    ]
   },
   {
     id: '95',
@@ -1303,7 +1371,7 @@ export const questions: Question[] = [
     starterCode: "def two_basket_fruit_pick():\n    # Your code here\n    pass",
     examples: [
       { input: "fruits = [1,2,1,2,3]", output: "4" }
-    ],
+    ]
   },
   {
     id: '96',
@@ -1316,7 +1384,7 @@ export const questions: Question[] = [
     starterCode: "def palindrome_chain_check():\n    # Your code here\n    pass",
     examples: [
       { input: "chain = [1,2,2,1]", output: "true" }
-    ],
+    ]
   },
   {
     id: '97',
@@ -1329,7 +1397,7 @@ export const questions: Question[] = [
     starterCode: "def tree_path_target_sum():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [5,4,8,11,null,13,4,7,2,1], target = 22", output: "true" }
-    ],
+    ]
   },
   {
     id: '98',
@@ -1342,7 +1410,7 @@ export const questions: Question[] = [
     starterCode: "def right_side_tree_view():\n    # Your code here\n    pass",
     examples: [
       { input: "root = [1,2,3,null,5,null,4]", output: "[1,3,4]" }
-    ],
+    ]
   },
   {
     id: '99',
@@ -1355,7 +1423,7 @@ export const questions: Question[] = [
     starterCode: "def decode_digit_message():\n    # Your code here\n    pass",
     examples: [
       { input: "digits = \"226\"", output: "3" }
-    ],
+    ]
   },
   {
     id: '100',
@@ -1368,13 +1436,18 @@ export const questions: Question[] = [
     starterCode: "def common_subsequence_length():\n    # Your code here\n    pass",
     examples: [
       { input: "a = \"abcde\", b = \"ace\"", output: "3" }
-    ],
+    ]
   }
 ]
 
 export const featuredQuestions = questions.filter((q) => q.featured)
 
+/** Active practice bank — featured problems only (expand in batches). */
+export const practiceQuestions = featuredQuestions
+
 export const questionCount = questions.length
+
+export const practiceQuestionCount = practiceQuestions.length
 
 export function getQuestionBySlug(slug: string): Question | undefined {
   return questions.find((q) => q.slug === slug)

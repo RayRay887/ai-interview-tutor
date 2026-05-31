@@ -19,7 +19,7 @@ export const aiMessages = [
 ]
 
 export const testCases = [
-  { input: 'values = [3, 8, 1, 6], target = 9', output: '[0, 3]', status: 'passed' as const },
+  { input: 'values = [2, 7, 11, 15], target = 9', output: '[0, 1]', status: 'passed' as const },
   { input: 'values = [4, 5, 1], target = 6', output: '[1, 2]', status: 'passed' as const },
   { input: 'values = [3, 3], target = 6', output: '[0, 1]', status: 'running' as const },
 ]

@@ -6,6 +6,7 @@ import { SessionSetupModal } from '../components/practice/SessionSetupModal'
 import { useAuth } from '../context/AuthContext'
 import { useSignInModal } from '../context/SignInModalContext'
 import { getQuestionBySlug } from '../data/questions'
+import type { SessionConfig } from '../types/session'
 
 export function PracticePage() {
   const { slug } = useParams<{ slug: string }>()
@@ -13,7 +14,7 @@ export function PracticePage() {
   const { openSignIn } = useSignInModal()
   const navigate = useNavigate()
   const question = slug ? getQuestionBySlug(slug) : undefined
-  const [sessionMinutes, setSessionMinutes] = useState<number | null>(null)
+  const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null)
   const [micReady, setMicReady] = useState(false)
   const [micDeviceId, setMicDeviceId] = useState('')
   const [authPrompted, setAuthPrompted] = useState(false)
@@ -48,11 +49,11 @@ export function PracticePage() {
     )
   }
 
-  if (sessionMinutes === null) {
+  if (sessionConfig === null) {
     return (
       <SessionSetupModal
         question={question}
-        onConfirm={setSessionMinutes}
+        onConfirm={setSessionConfig}
         onCancel={() => navigate('/questions')}
       />
     )
@@ -73,7 +74,8 @@ export function PracticePage() {
     <PracticeSession
       question={question}
       microphoneDeviceId={micDeviceId}
-      sessionMinutes={sessionMinutes}
+      sessionMinutes={sessionConfig.sessionMinutes}
+      userTestMode={sessionConfig.userTestMode}
     />
   )
 }

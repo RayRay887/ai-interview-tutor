@@ -32,6 +32,12 @@ export interface RunTestsResult {
   testResults: TestResult[]
 }
 
+export interface HiddenTestRunResult {
+  passed: number
+  total: number
+  consoleEntries: ConsoleEntry[]
+}
+
 let esbuildReady = false
 let pyodidePromise: Promise<PyodideInterface> | null = null
 let entryCounter = 0
@@ -329,6 +335,79 @@ export async function runQuestionTests(
   )
 
   return { consoleEntries, testResults }
+}
+
+/** Run hidden cases without revealing inputs/outputs in console messages. */
+export async function runHiddenQuestionTests(
+  question: Question,
+  code: string,
+  language: CodeLanguage,
+  testCases: TestCase[],
+): Promise<HiddenTestRunResult> {
+  const consoleEntries: ConsoleEntry[] = [
+    createEntry('info', `Running ${testCases.length} hidden test case(s)...`, 'test'),
+  ]
+
+  if (testCases.length === 0) {
+    return { passed: 0, total: 0, consoleEntries }
+  }
+
+  const { fnName, params } = parsePythonSignature(question.starterCode)
+  const runtimeFnName = language === 'python' ? fnName : snakeToCamel(fnName)
+
+  let compiledJavaScript: string | undefined
+  let pyodide: PyodideInterface | undefined
+
+  if (language === 'python') {
+    const compileError = await validatePython(code)
+    if (compileError) {
+      consoleEntries.push(compileError)
+      return { passed: 0, total: testCases.length, consoleEntries }
+    }
+    pyodide = await getPyodide()
+  } else {
+    const compiled = await compileJavaScript(code, language)
+    if (compiled.error) {
+      consoleEntries.push(compiled.error)
+      return { passed: 0, total: testCases.length, consoleEntries }
+    }
+    compiledJavaScript = compiled.code
+  }
+
+  let passed = 0
+
+  for (let index = 0; index < testCases.length; index += 1) {
+    const example = testCases[index]
+    const parsedInput = parseExampleInput(example.input)
+    const expected = parseExpectedOutput(example.output)
+    const args = params.map((param) => parsedInput[param])
+
+    if (args.some((value) => value === undefined)) {
+      continue
+    }
+
+    const execution =
+      language === 'python'
+        ? await runPythonCase(pyodide!, code, runtimeFnName, args)
+        : await runJavaScriptCase(compiledJavaScript!, runtimeFnName, args)
+
+    if (execution.error || !valuesEqual(execution.result, expected)) {
+      continue
+    }
+
+    passed += 1
+  }
+
+  const summaryLevel = passed === testCases.length ? 'success' : 'warn'
+  consoleEntries.push(
+    createEntry(
+      summaryLevel,
+      `Hidden: ${passed}/${testCases.length} passed${passed === testCases.length ? '' : ` (${testCases.length - passed} failed)`}`,
+      'test',
+    ),
+  )
+
+  return { passed, total: testCases.length, consoleEntries }
 }
 
 function stablePreview(value: unknown): string {

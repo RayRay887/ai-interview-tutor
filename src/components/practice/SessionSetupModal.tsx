@@ -1,4 +1,4 @@
-import { ArrowRight, Clock } from 'lucide-react'
+import { ArrowRight, Clock, FlaskConical } from 'lucide-react'
 import { useState } from 'react'
 import type { Question } from '../../data/questions'
 import {
@@ -6,16 +6,18 @@ import {
   MIN_SESSION_MINUTES,
   parseQuestionDurationMinutes,
 } from '../../lib/questionDuration'
+import type { SessionConfig } from '../../types/session'
 
 interface SessionSetupModalProps {
   question: Question
-  onConfirm: (sessionMinutes: number) => void
+  onConfirm: (config: SessionConfig) => void
   onCancel: () => void
 }
 
 export function SessionSetupModal({ question, onConfirm, onCancel }: SessionSetupModalProps) {
   const defaultMinutes = parseQuestionDurationMinutes(question.duration)
   const [sessionMinutes, setSessionMinutes] = useState(defaultMinutes)
+  const [userTestMode, setUserTestMode] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleConfirm = () => {
@@ -25,7 +27,7 @@ export function SessionSetupModal({ question, onConfirm, onCancel }: SessionSetu
       setSessionMinutes(clamped)
       return
     }
-    onConfirm(clamped)
+    onConfirm({ sessionMinutes: clamped, userTestMode })
   }
 
   const handleMinutesChange = (rawValue: string) => {
@@ -43,9 +45,10 @@ export function SessionSetupModal({ question, onConfirm, onCancel }: SessionSetu
             <Clock className="h-5 w-5 text-accent-blue" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-text-primary">Set your time limit</h2>
+            <h2 className="text-lg font-semibold text-text-primary">Session setup</h2>
             <p className="text-sm text-text-secondary">
-              Choose how long you want for <span className="text-text-primary">{question.title}</span>.
+              Configure your session for{' '}
+              <span className="text-text-primary">{question.title}</span>.
             </p>
           </div>
         </div>
@@ -74,6 +77,32 @@ export function SessionSetupModal({ question, onConfirm, onCancel }: SessionSetu
             <p className="mt-2 text-xs text-text-secondary">
               Minimum {MIN_SESSION_MINUTES} minutes. This cannot be changed once the session starts.
             </p>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-bg-primary/60 p-4">
+            <div className="flex items-start gap-3">
+              <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-accent-purple" />
+              <div className="flex-1">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={userTestMode}
+                    onChange={(event) => setUserTestMode(event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-bg-primary accent-accent-blue"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-text-primary">
+                      User test mode
+                    </span>
+                    <span className="mt-1 block text-xs leading-relaxed text-text-secondary">
+                      {userTestMode
+                        ? 'Only the example cases are provided — you design and add your own tests.'
+                        : 'Example cases plus hidden edge-case validation after examples pass.'}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
 
           {error && (

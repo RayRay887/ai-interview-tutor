@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { catalog } from './reworded-catalog.mjs'
 import { durationFor } from './catalog/helpers.mjs'
+import { hiddenTestsBySlug } from './hidden-tests/generated-map.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -30,6 +31,21 @@ const lines = unique.map((q, i) => {
     )
     .join(',\n')
 
+  const hidden = hiddenTestsBySlug[q.slug]
+  const hiddenBlock = hidden?.length
+    ? `,\n    hiddenTests: [\n${hidden
+        .map(
+          (e) =>
+            `      { input: ${JSON.stringify(e.input)}, output: ${JSON.stringify(e.output)} }`,
+        )
+        .join(',\n')}\n    ]`
+    : ''
+
+  const constraintsBlock =
+    q.constraints?.length
+      ? `,\n    constraints: [\n${q.constraints.map((c) => `      ${JSON.stringify(c)},`).join('\n')}\n    ]`
+      : ''
+
   return `  {
     id: '${i + 1}',
     slug: ${JSON.stringify(q.slug)},
@@ -41,7 +57,7 @@ const lines = unique.map((q, i) => {
     ${q.featured ? 'featured: true,\n    ' : ''}starterCode: ${JSON.stringify(q.starterCode)},
     examples: [
 ${ex}
-    ],
+    ]${hiddenBlock}${constraintsBlock}
   }`
 })
 
@@ -61,6 +77,8 @@ export interface Question {
   featured?: boolean
   starterCode: string
   examples: { input: string; output: string }[]
+  hiddenTests?: { input: string; output: string }[]
+  constraints?: string[]
 }
 
 export const questions: Question[] = [
@@ -69,7 +87,12 @@ ${lines.join(',\n')}
 
 export const featuredQuestions = questions.filter((q) => q.featured)
 
+/** Active practice bank — featured problems only (expand in batches). */
+export const practiceQuestions = featuredQuestions
+
 export const questionCount = questions.length
+
+export const practiceQuestionCount = practiceQuestions.length
 
 export function getQuestionBySlug(slug: string): Question | undefined {
   return questions.find((q) => q.slug === slug)
