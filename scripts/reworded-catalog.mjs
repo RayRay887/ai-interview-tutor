@@ -10,7 +10,7 @@ const allProblems = [
     description:
       'You receive a list of integers and a target total. Return the two distinct indices whose values add up to the target. Exactly one valid pair exists, and you may not reuse the same index twice.',
     examples: [
-      { input: 'values = [3, 8, 1, 6], target = 9', output: '[0, 3]' },
+      { input: 'values = [2, 7, 11, 15], target = 9', output: '[0, 1]' },
       { input: 'values = [4, 5, 1], target = 6', output: '[1, 2]' },
     ],
     starterCode: `def pair_target_indices(values: list[int], target: int) -> list[int]:
@@ -26,6 +26,7 @@ const allProblems = [
       'From an integer list, find every unique triplet of indices whose values sum to zero. The solution set must not contain duplicate triplets.',
     examples: [
       { input: 'values = [-1, 0, 1, 2, -1, -4]', output: '[[-1,-1,2],[-1,0,1]]' },
+      { input: 'values = [0, 0, 0]', output: '[[0,0,0]]' },
     ],
     starterCode: `def zero_sum_triplets(values: list[int]) -> list[list[int]]:
     # Your code here
@@ -35,9 +36,16 @@ const allProblems = [
     title: 'Duplicate Value Detector',
     category: 'Arrays & Hashmaps',
     difficulty: 'Easy',
+    featured: true,
     description:
       'Determine whether any value appears at least twice in the given integer list.',
-    examples: [{ input: 'values = [1, 2, 3, 1]', output: 'true' }],
+    examples: [
+      { input: 'values = [1, 2, 3, 1]', output: 'true' },
+      { input: 'values = [1, 2, 3, 4]', output: 'false' },
+    ],
+    starterCode: `def duplicate_value_detector(values: list[int]) -> bool:
+    # Your code here
+    pass`,
   }),
   problem({
     title: 'Letter Multiset Match',
@@ -72,19 +80,31 @@ const allProblems = [
     title: 'Product Except Self',
     category: 'Arrays & Hashmaps',
     difficulty: 'Medium',
+    featured: true,
     description:
       'Build an output array where each position holds the product of all input values except the value at that position. Solve without division and in O(n) time.',
     examples: [
       { input: 'values = [1, 2, 3, 4]', output: '[24, 12, 8, 6]' },
+      { input: 'values = [2, 3, 4, 5]', output: '[60, 40, 30, 24]' },
     ],
+    starterCode: `def product_except_self(values: list[int]) -> list[int]:
+    # Your code here
+    pass`,
   }),
   problem({
     title: 'Longest Consecutive Run',
     category: 'Arrays & Hashmaps',
     difficulty: 'Medium',
+    featured: true,
     description:
       'Given unsorted integers, return the length of the longest consecutive increasing sequence (values differ by 1).',
-    examples: [{ input: 'values = [100, 4, 200, 1, 3, 2]', output: '4' }],
+    examples: [
+      { input: 'values = [100, 4, 200, 1, 3, 2]', output: '4' },
+      { input: 'values = [0, 3, 7, 2, 5, 8, 4, 6, 0, 1]', output: '9' },
+    ],
+    starterCode: `def longest_consecutive_run(values: list[int]) -> int:
+    # Your code here
+    pass`,
   }),
   problem({
     title: 'Subarray Sum Target',
@@ -127,9 +147,16 @@ const allProblems = [
     title: 'Widest Container Area',
     category: 'Arrays & Hashmaps',
     difficulty: 'Medium',
+    featured: true,
     description:
       'Given vertical line heights, pick two lines that together with the x-axis form a container. Maximize the water volume held.',
-    examples: [{ input: 'heights = [1,8,6,2,5,4,8,3,7]', output: '49' }],
+    examples: [
+      { input: 'heights = [1,8,6,2,5,4,8,3,7]', output: '49' },
+      { input: 'heights = [1, 1]', output: '1' },
+    ],
+    starterCode: `def widest_container_area(heights: list[int]) -> int:
+    # Your code here
+    pass`,
   }),
   problem({
     title: 'Rain Trap Volume',
@@ -143,17 +170,31 @@ const allProblems = [
     title: 'Best Single Trade Profit',
     category: 'Arrays & Hashmaps',
     difficulty: 'Easy',
+    featured: true,
     description:
       'Daily stock prices in order. You may buy once and sell once later. Return maximum profit, or 0 if none.',
-    examples: [{ input: 'prices = [7, 1, 5, 3, 6, 4]', output: '5' }],
+    examples: [
+      { input: 'prices = [7, 1, 5, 3, 6, 4]', output: '5' },
+      { input: 'prices = [7, 6, 4, 3, 1]', output: '0' },
+    ],
+    starterCode: `def best_single_trade_profit(prices: list[int]) -> int:
+    # Your code here
+    pass`,
   }),
   problem({
     title: 'Maximum Subarray Sum',
     category: 'Arrays & Hashmaps',
     difficulty: 'Medium',
+    featured: true,
     description:
       'Find the contiguous subarray with the largest sum and return that sum.',
-    examples: [{ input: 'values = [-2, 1, -3, 4, -1, 2, 1, -5, 4]', output: '6' }],
+    examples: [
+      { input: 'values = [-2, 1, -3, 4, -1, 2, 1, -5, 4]', output: '6' },
+      { input: 'values = [1]', output: '1' },
+    ],
+    starterCode: `def maximum_subarray_sum(values: list[int]) -> int:
+    # Your code here
+    pass`,
   }),
   problem({
     title: 'Majority Vote Threshold',

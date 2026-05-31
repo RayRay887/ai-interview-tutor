@@ -38,6 +38,9 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'OPENAI_API_KEY is not configured.' }, 503)
   }
 
+  const ttsModel = Deno.env.get('OPENAI_TTS_MODEL') ?? 'tts-1-hd'
+  const ttsVoice = Deno.env.get('OPENAI_TTS_VOICE') ?? 'ash'
+
   const response = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -45,9 +48,10 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'tts-1',
-      voice: 'nova',
+      model: ttsModel,
+      voice: ttsVoice,
       input: text,
+      speed: 0.95,
       response_format: 'mp3',
     }),
   })

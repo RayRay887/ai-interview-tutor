@@ -12,7 +12,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   codeLanguages,
   getLanguageExtension,
@@ -22,6 +22,7 @@ import {
 import type { Question } from '../../data/questions'
 import { isMicrophoneAvailable, useMicrophoneMonitor } from '../../hooks/useMicrophoneMonitor'
 import {
+  runHiddenQuestionTests,
   runQuestionTests,
   type ConsoleEntry,
   type TestCase,
@@ -36,11 +37,16 @@ import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
 import { InterviewerPanel } from './InterviewerPanel'
 import { useInterviewSession } from '../../hooks/useInterviewSession'
+import {
+  buildLastFailures,
+  type PracticeSessionSnapshot,
+} from '../../prompts/interviewer/sessionSnapshot'
 
 interface PracticeSessionProps {
   question: Question
   microphoneDeviceId: string
   sessionMinutes: number
+  userTestMode: boolean
 }
 
 interface CustomTestCase {
@@ -59,6 +65,7 @@ export function PracticeSession({
   question,
   microphoneDeviceId,
   sessionMinutes,
+  userTestMode,
 }: PracticeSessionProps) {
   const [language, setLanguage] = useState<CodeLanguage>('python')
   const [codeByLanguage, setCodeByLanguage] = useState<Partial<Record<CodeLanguage, string>>>({
@@ -72,28 +79,66 @@ export function PracticeSession({
   const [testResults, setTestResults] = useState<TestResult[]>(() =>
     createIdleResults(question.examples.length),
   )
+  const [hiddenSummary, setHiddenSummary] = useState<{ passed: number; total: number } | null>(
+    null,
+  )
+  const testsJustRunRef = useRef(false)
 
   const isPaused = pauseReason !== null
   const isTimerRunning = !isPaused && remainingSeconds > 0
-
-  const interview = useInterviewSession({
-    question,
-  })
 
   const code = codeByLanguage[language] ?? getStarterCode(question, language)
   const fileName = `${question.slug}.${getLanguageExtension(language)}`
   const inputPlaceholder = question.examples[0]?.input ?? 'nums = [1, 2], target = 3'
   const outputPlaceholder = question.examples[0]?.output ?? '[0, 1]'
 
-  const allTestCases = useMemo<TestCase[]>(
-    () => [
-      ...question.examples,
-      ...customTestCases.map(({ input, output }) => ({ input, output })),
-    ],
-    [question.examples, customTestCases],
-  )
+  const visibleTestCases = useMemo<TestCase[]>(() => {
+    if (userTestMode) {
+      return [
+        ...question.examples,
+        ...customTestCases.map(({ input, output }) => ({ input, output })),
+      ]
+    }
+    return question.examples
+  }, [question.examples, customTestCases, userTestMode])
 
-  const totalCount = allTestCases.length
+  const totalCount = visibleTestCases.length
+
+  const getSnapshot = useCallback((): PracticeSessionSnapshot => {
+    const passed = testResults.filter((result) => result.status === 'passed').length
+    return {
+      code,
+      language,
+      consoleEntries,
+      passedCount: passed,
+      totalCount: visibleTestCases.length,
+      lastFailures: buildLastFailures(testResults, visibleTestCases),
+      hiddenPassed: hiddenSummary?.passed,
+      hiddenTotal: hiddenSummary?.total,
+      remainingSeconds,
+      sessionMinutes,
+      testsJustRun: testsJustRunRef.current,
+    }
+  }, [
+    code,
+    language,
+    consoleEntries,
+    testResults,
+    visibleTestCases,
+    hiddenSummary,
+    remainingSeconds,
+    sessionMinutes,
+  ])
+
+  const interview = useInterviewSession({
+    question,
+    microphoneDeviceId,
+    paused: isPaused,
+    getSnapshot,
+    onTestsJustRunConsumed: () => {
+      testsJustRunRef.current = false
+    },
+  })
 
   const handleMicLost = useCallback(() => {
     setPauseReason((current) => (current === 'microphone' ? current : 'microphone'))
@@ -179,12 +224,33 @@ export function PracticeSession({
     if (isPaused) return
     setIsRunningTests(true)
     setConsoleEntries([])
-    setTestResults(allTestCases.map(() => ({ status: 'running' })))
+    setHiddenSummary(null)
+    setTestResults(visibleTestCases.map(() => ({ status: 'running' })))
 
     try {
-      const result = await runQuestionTests(question, code, language, allTestCases)
+      const result = await runQuestionTests(question, code, language, visibleTestCases)
       setConsoleEntries(result.consoleEntries)
       setTestResults(result.testResults)
+      testsJustRunRef.current = true
+
+      const examplesPassed =
+        result.testResults.slice(0, question.examples.length).every((r) => r.status === 'passed')
+
+      if (
+        !userTestMode &&
+        examplesPassed &&
+        question.hiddenTests &&
+        question.hiddenTests.length > 0
+      ) {
+        const hidden = await runHiddenQuestionTests(
+          question,
+          code,
+          language,
+          question.hiddenTests,
+        )
+        setHiddenSummary({ passed: hidden.passed, total: hidden.total })
+        setConsoleEntries((current) => [...current, ...hidden.consoleEntries])
+      }
     } catch (error) {
       setConsoleEntries([
         {
@@ -194,7 +260,7 @@ export function PracticeSession({
           source: 'runtime',
         },
       ])
-      setTestResults(allTestCases.map(() => ({ status: 'failed' })))
+      setTestResults(visibleTestCases.map(() => ({ status: 'failed' })))
     } finally {
       setIsRunningTests(false)
     }
@@ -216,7 +282,11 @@ export function PracticeSession({
 
   const passedCount = testResults.filter((result) => result.status === 'passed').length
   const hasRunTests = testResults.some((result) => result.status !== 'idle')
-  const allPassed = hasRunTests && passedCount === totalCount
+  const allVisiblePassed = hasRunTests && passedCount === totalCount
+  const allHiddenPassed =
+    hiddenSummary !== null && hiddenSummary.passed === hiddenSummary.total
+  const allPassed =
+    allVisiblePassed && (userTestMode || hiddenSummary === null || allHiddenPassed)
 
   useEffect(() => {
     if (!isTimerRunning) return
@@ -478,7 +548,7 @@ export function PracticeSession({
                   })}
                 </div>
 
-                {customTestCases.length > 0 && (
+                {userTestMode && customTestCases.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-[10px] font-medium tracking-wider text-text-secondary uppercase">
                       Custom
@@ -561,6 +631,7 @@ export function PracticeSession({
                   </div>
                 )}
 
+                {userTestMode && (
                 <button
                   type="button"
                   onClick={handleAddCustomTestCase}
@@ -570,6 +641,26 @@ export function PracticeSession({
                   <Plus className="h-3.5 w-3.5" />
                   Add test case
                 </button>
+                )}
+
+                {!userTestMode && hiddenSummary && (
+                  <div className="rounded-lg border border-white/10 bg-bg-primary/60 p-3">
+                    <div className="flex items-center gap-2">
+                      {hiddenSummary.passed === hiddenSummary.total ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                      )}
+                      <span className="text-xs font-medium text-text-primary">Hidden tests</span>
+                    </div>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      Hidden: {hiddenSummary.passed}/{hiddenSummary.total} passed
+                      {hiddenSummary.passed < hiddenSummary.total
+                        ? ` (${hiddenSummary.total - hiddenSummary.passed} failed)`
+                        : ''}
+                    </p>
+                  </div>
+                )}
               </div>
             </CollapsibleSection>
           </div>
@@ -578,9 +669,13 @@ export function PracticeSession({
             phase={interview.phase}
             error={interview.error}
             isSpeaking={interview.isSpeaking}
+            isListening={interview.isListening}
+            interimTranscript={interview.interimTranscript}
+            speechSupported={interview.speechSupported}
             showPlayButton={interview.playBlocked}
             onRetry={() => void interview.retryStart()}
             onPlayIntroduction={() => void interview.playIntroduction()}
+            onSubmitMessage={interview.submitMessage}
           />
         </div>
 

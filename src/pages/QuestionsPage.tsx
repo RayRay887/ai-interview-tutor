@@ -6,9 +6,9 @@ import { QuestionCard } from '../components/questions/QuestionCard'
 import { PAGE_SIZE, QuestionPagination } from '../components/questions/QuestionPagination'
 import { GradientText } from '../components/ui/GradientText'
 import type { Difficulty } from '../data/questions'
-import { questionCount, questions } from '../data/questions'
+import { practiceQuestions, practiceQuestionCount } from '../data/questions'
 
-const categories = [...new Set(questions.map((q) => q.category))].sort()
+const categories = [...new Set(practiceQuestions.map((q) => q.category))].sort()
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
 
 export function QuestionsPage() {
@@ -23,7 +23,7 @@ export function QuestionsPage() {
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return questions.filter((q) => {
+    return practiceQuestions.filter((q) => {
       if (category !== 'All' && q.category !== category) return false
       if (difficulty !== 'All' && q.difficulty !== difficulty) return false
       if (!query) return true
@@ -72,7 +72,7 @@ export function QuestionsPage() {
             <GradientText as="span">All practice questions</GradientText>
           </h1>
           <p className="mt-4 text-lg text-text-secondary">
-            {questionCount}+ curated problems across arrays, trees, dynamic programming, and
+            {practiceQuestionCount} curated problems across arrays, stacks, sliding window, and
             more. Choose a problem and start a mock interview session.
           </p>
         </motion.div>
@@ -114,7 +114,7 @@ export function QuestionsPage() {
               ))}
             </select>
             <span className="flex items-center text-sm text-text-secondary">
-              {filtered.length} match{filtered.length === 1 ? '' : 'es'} · {questionCount} total
+              {filtered.length} match{filtered.length === 1 ? '' : 'es'} · {practiceQuestionCount} total
             </span>
           </div>
         </div>
