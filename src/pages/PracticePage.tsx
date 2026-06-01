@@ -6,6 +6,7 @@ import { SessionSetupModal } from '../components/practice/SessionSetupModal'
 import { useAuth } from '../context/AuthContext'
 import { useSignInModal } from '../context/SignInModalContext'
 import { getQuestionBySlug } from '../data/questions'
+import { stopAllInterviewAudio } from '../hooks/useInterviewerTTS'
 import type { SessionConfig } from '../types/session'
 
 export function PracticePage() {
@@ -20,12 +21,19 @@ export function PracticePage() {
   const [authPrompted, setAuthPrompted] = useState(false)
 
   useEffect(() => {
+    return () => stopAllInterviewAudio()
+  }, [])
+
+  useEffect(() => {
     if (isLoading || user || !question || authPrompted) return
 
     setAuthPrompted(true)
     openSignIn({
       redirectTo: `/practice/${question.slug}`,
-      onCancel: () => navigate('/questions'),
+      onCancel: () => {
+        stopAllInterviewAudio()
+        navigate('/questions')
+      },
     })
   }, [isLoading, user, question, authPrompted, openSignIn, navigate])
 
@@ -54,7 +62,10 @@ export function PracticePage() {
       <SessionSetupModal
         question={question}
         onConfirm={setSessionConfig}
-        onCancel={() => navigate('/questions')}
+        onCancel={() => {
+          stopAllInterviewAudio()
+          navigate('/questions')
+        }}
       />
     )
   }

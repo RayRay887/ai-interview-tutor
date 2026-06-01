@@ -5,6 +5,7 @@ interface InterviewerPanelProps {
   phase: InterviewPhase
   error: string | null
   isSpeaking: boolean
+  paused?: boolean
   isListening?: boolean
   speechSupported?: boolean
   showPlayButton?: boolean
@@ -30,16 +31,26 @@ function Waveform({ active }: { active: boolean }) {
   )
 }
 
-function statusLabel(phase: InterviewPhase, isSpeaking: boolean): string {
-  if (phase === 'error') return 'Voice unavailable'
+function statusLabel(
+  phase: InterviewPhase,
+  isSpeaking: boolean,
+  isListening: boolean,
+  paused: boolean,
+): string {
+  if (paused) return 'Paused'
   if (isSpeaking || phase === 'speaking') return 'Speaking…'
-  return 'Listening…'
+  if (phase === 'thinking') return 'Thinking…'
+  if (isListening || phase === 'listening') return 'Listening…'
+  if (phase === 'starting') return 'Preparing voice…'
+  if (phase === 'error') return 'Voice unavailable'
+  return 'Ready'
 }
 
 export function InterviewerPanel({
   phase,
   error,
   isSpeaking,
+  paused = false,
   isListening = false,
   speechSupported = true,
   showPlayButton = false,
@@ -48,17 +59,19 @@ export function InterviewerPanel({
 }: InterviewerPanelProps) {
   const showLoader = phase === 'starting' || phase === 'thinking'
   const waveformActive =
-    isSpeaking || isListening || phase === 'starting' || phase === 'thinking'
+    !paused && (isSpeaking || isListening || phase === 'starting' || phase === 'thinking')
 
-  const helperLine = isSpeaking
-    ? 'Listen to your tutor — the problem is on the left.'
-    : isListening
-      ? 'Mic is on — speak when ready.'
-      : phase === 'thinking'
-        ? 'Just a moment…'
-        : phase === 'starting'
-          ? 'Getting ready…'
-          : 'Voice interview session'
+  const helperLine = paused
+    ? 'Interview audio is paused with the session.'
+    : isSpeaking
+      ? 'Listen to your tutor — the problem is on the left.'
+      : isListening
+        ? 'Mic is on — speak when ready.'
+        : phase === 'thinking'
+          ? 'Just a moment…'
+          : phase === 'starting'
+            ? 'Getting ready…'
+            : 'Voice interview session'
 
   return (
     <div className="flex min-h-0 flex-col bg-bg-secondary/30">
@@ -81,7 +94,7 @@ export function InterviewerPanel({
             phase === 'error' ? 'text-rose-400' : 'text-emerald-400'
           }`}
         >
-          {statusLabel(phase, isSpeaking)}
+          {statusLabel(phase, isSpeaking, isListening, paused)}
         </p>
 
         <div className="mt-6 w-full max-w-xs rounded-xl border border-white/10 bg-bg-primary/60 p-4">
@@ -89,7 +102,7 @@ export function InterviewerPanel({
           <p className="mt-3 text-xs leading-relaxed text-text-secondary">{helperLine}</p>
         </div>
 
-        {!speechSupported && phase === 'listening' && (
+        {!speechSupported && phase === 'listening' && !paused && (
           <p className="mt-3 max-w-xs text-xs text-amber-400/90">
             Microphone capture is unavailable in this browser.
           </p>
@@ -99,7 +112,7 @@ export function InterviewerPanel({
           <button
             type="button"
             onClick={onPlayIntroduction}
-            disabled={isSpeaking || phase === 'starting'}
+            disabled={isSpeaking || phase === 'starting' || paused}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-blue/25 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="h-4 w-4" />

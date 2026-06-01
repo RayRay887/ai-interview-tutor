@@ -114,7 +114,7 @@ function openAiTranscribeDevProxy(env: Record<string, string>): Plugin {
 
           const incoming = new Request('http://localhost/api/transcribe', {
             method: 'POST',
-            headers: req.headers as HeadersInit,
+            headers: req.headers as Record<string, string>,
             body: Buffer.concat(chunks),
           })
           const formData = await incoming.formData()

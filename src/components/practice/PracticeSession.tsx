@@ -670,6 +670,7 @@ export function PracticeSession({
             phase={interview.phase}
             error={interview.error}
             isSpeaking={interview.isSpeaking}
+            paused={isPaused}
             isListening={interview.isListening}
             speechSupported={interview.speechSupported}
             showPlayButton={interview.playBlocked}
