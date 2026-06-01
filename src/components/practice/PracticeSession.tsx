@@ -130,19 +130,20 @@ export function PracticeSession({
     sessionMinutes,
   ])
 
+  const handleMicLost = useCallback(() => {
+    setPauseReason((current) => (current === 'microphone' ? current : 'microphone'))
+  }, [])
+
   const interview = useInterviewSession({
     question,
     microphoneDeviceId,
     paused: isPaused,
+    onMicLost: handleMicLost,
     getSnapshot,
     onTestsJustRunConsumed: () => {
       testsJustRunRef.current = false
     },
   })
-
-  const handleMicLost = useCallback(() => {
-    setPauseReason((current) => (current === 'microphone' ? current : 'microphone'))
-  }, [])
 
   useMicrophoneMonitor({
     deviceId: microphoneDeviceId,
