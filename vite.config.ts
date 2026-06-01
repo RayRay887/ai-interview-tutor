@@ -85,7 +85,6 @@ function openAiTtsDevProxy(env: Record<string, string>): Plugin {
 
 function openAiTranscribeDevProxy(env: Record<string, string>): Plugin {
   const apiKey = env.OPENAI_API_KEY
-  const whisperModel = env.OPENAI_WHISPER_MODEL ?? 'whisper-1'
 
   return {
     name: 'openai-transcribe-dev-proxy',

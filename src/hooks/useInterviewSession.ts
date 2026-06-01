@@ -50,6 +50,11 @@ export function useInterviewSession({
   const lastCandidateSpeechRef = useRef(Date.now())
   const processingRef = useRef(false)
   const conversationStartedRef = useRef(false)
+  const pausedRef = useRef(paused)
+
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   useEffect(() => {
     getSnapshotRef.current = getSnapshot
@@ -121,6 +126,7 @@ export function useInterviewSession({
       }
       setPhase('speaking')
       await speak(reply)
+      if (pausedRef.current) return
       setPhase('listening')
     },
     [appendTranscript, speak],
@@ -141,6 +147,7 @@ export function useInterviewSession({
 
       try {
         const turn = await requestInterviewTurn(buildTurnRequest(text, transcriptForTurn))
+        if (pausedRef.current) return
         await deliverReply(turn.reply, turn.role)
       } catch (err) {
         const message =
@@ -192,6 +199,7 @@ export function useInterviewSession({
     try {
       setPhase('speaking')
       await speak(opening)
+      if (pausedRef.current) return
       appendTranscript('interviewer', opening)
       conversationStartedRef.current = true
       setPhase('listening')
@@ -216,14 +224,18 @@ export function useInterviewSession({
 
     return () => {
       stop()
+      speech.stop()
+      processingRef.current = false
     }
-  }, [enabled, question.slug, startSession, stop])
+  }, [enabled, question.slug, startSession, stop, speech])
 
   useEffect(() => {
-    if (paused && phase === 'listening') {
-      speech.stop()
-    }
-  }, [paused, phase, speech])
+    if (!paused) return
+
+    stop()
+    speech.stop()
+    processingRef.current = false
+  }, [paused, stop, speech])
 
   const isBusy = phase === 'starting' || phase === 'thinking' || isSpeaking
 

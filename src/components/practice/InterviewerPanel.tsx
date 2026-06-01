@@ -6,6 +6,7 @@ interface InterviewerPanelProps {
   phase: InterviewPhase
   error: string | null
   isSpeaking: boolean
+  paused?: boolean
   isListening?: boolean
   interimTranscript?: string
   speechSupported?: boolean
@@ -37,7 +38,9 @@ function statusLabel(
   phase: InterviewPhase,
   isSpeaking: boolean,
   isListening: boolean,
+  paused: boolean,
 ): string {
+  if (paused) return 'Paused'
   if (isSpeaking || phase === 'speaking') return 'Speaking…'
   if (phase === 'thinking') return 'Thinking…'
   if (isListening || phase === 'listening') return 'Listening…'
@@ -51,6 +54,7 @@ export function InterviewerPanel({
   phase,
   error,
   isSpeaking,
+  paused = false,
   isListening = false,
   interimTranscript = '',
   speechSupported = true,
@@ -60,8 +64,10 @@ export function InterviewerPanel({
   onSubmitMessage,
 }: InterviewerPanelProps) {
   const [typedMessage, setTypedMessage] = useState('')
-  const showInput = Boolean(onSubmitMessage) && phase !== 'starting' && phase !== 'error'
-  const waveformActive = isSpeaking || isListening || phase === 'starting' || phase === 'thinking'
+  const showInput =
+    Boolean(onSubmitMessage) && !paused && phase !== 'starting' && phase !== 'error'
+  const waveformActive =
+    !paused && (isSpeaking || isListening || phase === 'starting' || phase === 'thinking')
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -92,13 +98,15 @@ export function InterviewerPanel({
             phase === 'error' ? 'text-rose-400' : 'text-emerald-400'
           }`}
         >
-          {statusLabel(phase, isSpeaking, isListening)}
+          {statusLabel(phase, isSpeaking, isListening, paused)}
         </p>
 
         <div className="mt-6 w-full max-w-xs rounded-xl border border-white/10 bg-bg-primary/60 p-4">
           <Waveform active={waveformActive} />
           <p className="mt-3 text-xs leading-relaxed text-text-secondary">
-            {isSpeaking
+            {paused
+              ? 'Interview audio is paused with the session.'
+              : isSpeaking
               ? 'Listen to your tutor — the problem is on the left.'
               : isListening
                 ? interimTranscript
