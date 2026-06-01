@@ -1,4 +1,5 @@
 import type { InterviewMessageRole, InterviewQuestionContext } from '../types/interview'
+import { getSessionOpeningFallback } from './interviewerSession'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 export interface TextToSpeechResponse {
@@ -14,6 +15,7 @@ export interface InterviewTurnRequest {
   question: InterviewQuestionContext
   messages: InterviewTurnMessage[]
   userMessage?: string
+  interviewerFirstName?: string
   code?: { source?: string; changedSinceLastTurn?: boolean; lineCount?: number }
   console?: { level: 'info' | 'success' | 'error' | 'warn'; message: string; line?: number }[]
   tests?: { passed: number; total: number; lastFailures?: string[] }
@@ -65,9 +67,27 @@ export function prepareSpeechText(text: string): string {
     .trim()
 }
 
-/** Fixed opening line — spoken aloud, not shown as text in the UI. */
+/** @deprecated Use requestSessionOpening — kept as offline fallback text only. */
 export function getSessionOpening(question: InterviewQuestionContext): string {
-  return `Hi, I'm your AI tutor for today. Let's start with this question: ${question.title}. I'll give you two minutes to read it.`
+  return getSessionOpeningFallback('Alex', question.title)
+}
+
+export async function requestSessionOpening(
+  question: InterviewQuestionContext,
+  interviewerFirstName: string,
+): Promise<InterviewTurnResponse> {
+  try {
+    return await requestInterviewTurn({
+      question,
+      messages: [],
+      interviewerFirstName,
+    })
+  } catch {
+    return {
+      reply: getSessionOpeningFallback(interviewerFirstName, question.title),
+      role: 'interviewer',
+    }
+  }
 }
 
 function base64ToBlob(base64: string): Blob {
@@ -220,7 +240,9 @@ async function fetchDevTranscription(audio: Blob): Promise<string> {
       // ignore
     }
     throw new TranscriptionError(
-      `${detail} Add OPENAI_API_KEY to .env or deploy the transcribe Supabase function.`,
+      detail.includes('OPENAI') || detail.includes('Whisper')
+        ? detail
+        : `${detail} Check the dev server log or your OpenAI API key.`,
     )
   }
 

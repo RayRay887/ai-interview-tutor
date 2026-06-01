@@ -670,12 +670,10 @@ export function PracticeSession({
             error={interview.error}
             isSpeaking={interview.isSpeaking}
             isListening={interview.isListening}
-            interimTranscript={interview.interimTranscript}
             speechSupported={interview.speechSupported}
             showPlayButton={interview.playBlocked}
             onRetry={() => void interview.retryStart()}
             onPlayIntroduction={() => void interview.playIntroduction()}
-            onSubmitMessage={interview.submitMessage}
           />
         </div>
 
