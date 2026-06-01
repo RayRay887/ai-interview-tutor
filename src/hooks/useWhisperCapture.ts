@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { requestTranscription, TranscriptionError } from '../lib/interviewApi'
 
 interface UseWhisperCaptureOptions {
@@ -286,6 +286,13 @@ export function useWhisperCapture({
     cleanupStream()
   }, [cleanupStream])
 
+  const resumeAudioContext = useCallback(async () => {
+    const ctx = audioContextRef.current
+    if (ctx && ctx.state === 'suspended') {
+      await ctx.resume()
+    }
+  }, [])
+
   useEffect(() => {
     if (enabled && isSupported && deviceId) {
       void start()
@@ -295,15 +302,13 @@ export function useWhisperCapture({
     return undefined
   }, [enabled, isSupported, deviceId, start, stop])
 
-  return {
-    isListening,
-    isSupported,
-    stop,
-    resumeAudioContext: async () => {
-      const ctx = audioContextRef.current
-      if (ctx && ctx.state === 'suspended') {
-        await ctx.resume()
-      }
-    },
-  }
+  return useMemo(
+    () => ({
+      isListening,
+      isSupported,
+      stop,
+      resumeAudioContext,
+    }),
+    [isListening, isSupported, stop, resumeAudioContext],
+  )
 }

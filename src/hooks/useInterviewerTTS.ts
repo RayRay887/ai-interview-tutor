@@ -5,6 +5,12 @@ let activeAudio: HTMLAudioElement | null = null
 let activeObjectUrl: string | null = null
 let speakGeneration = 0
 
+/** Stop any in-flight or playing interviewer audio (e.g. when leaving practice). */
+export function stopAllInterviewAudio() {
+  speakGeneration += 1
+  stopActiveAudio()
+}
+
 function stopActiveAudio() {
   if (activeAudio) {
     activeAudio.pause()
@@ -69,8 +75,7 @@ export function useInterviewerTTS() {
   const pendingBlobRef = useRef<Blob | null>(null)
 
   const stop = useCallback(() => {
-    speakGeneration += 1
-    stopActiveAudio()
+    stopAllInterviewAudio()
     setIsSpeaking(false)
   }, [])
 

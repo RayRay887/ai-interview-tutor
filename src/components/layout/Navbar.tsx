@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import { ArrowLeft, LogIn, LogOut, Menu, User, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useSignInModal } from '../../context/SignInModalContext'
+import { stopAllInterviewAudio } from '../../hooks/useInterviewerTTS'
 import { navLinks } from '../../data/nav'
 import { PrepifyLogo } from '../brand/PrepifyLogo'
 import { NavLinkItem } from './NavLinkItem'
@@ -39,15 +40,21 @@ export function Navbar() {
 
   const brand = <PrepifyLogo size="md" to="/" linked />
 
+  const handleBackToQuestions = () => {
+    stopAllInterviewAudio()
+    navigate('/questions')
+  }
+
   const backLink = (
-    <Link
-      to="/questions"
-      className="inline-flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-accent-blue"
+    <button
+      type="button"
+      onClick={handleBackToQuestions}
+      className="relative z-10 inline-flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-accent-blue"
     >
       <ArrowLeft className="h-4 w-4" />
       <span className="hidden sm:inline">Back to questions</span>
       <span className="sm:hidden">Back</span>
-    </Link>
+    </button>
   )
 
   return (
@@ -62,9 +69,9 @@ export function Navbar() {
       transition={{ duration: 0.5, ease: 'easeOut' }}
     >
       {isPractice ? (
-        <nav className="relative mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6 lg:px-8">
-          <div className="justify-self-start">{backLink}</div>
-          <div className="justify-self-center">{brand}</div>
+        <nav className="relative isolate mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6 lg:px-8">
+          <div className="relative z-10 justify-self-start">{backLink}</div>
+          <div className="relative z-[1] justify-self-center">{brand}</div>
           <div aria-hidden="true" />
         </nav>
       ) : (
