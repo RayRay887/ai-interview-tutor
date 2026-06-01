@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Question } from '../data/questions'
 import {
-  getSessionOpening,
   requestInterviewTurn,
+  requestSessionOpening,
   type InterviewTurnRequest,
 } from '../lib/interviewApi'
+import { pickInterviewerName } from '../lib/interviewerSession'
 import {
   buildInterviewerContext,
   candidateAskedForHint,
@@ -51,10 +52,17 @@ export function useInterviewSession({
   const processingRef = useRef(false)
   const conversationStartedRef = useRef(false)
   const pausedRef = useRef(paused)
+  const transcriptRef = useRef<InterviewerTranscriptEntry[]>([])
+  const interviewerNameRef = useRef(pickInterviewerName())
+  const speechResumeRef = useRef<(() => Promise<void>) | undefined>(undefined)
 
   useEffect(() => {
     pausedRef.current = paused
   }, [paused])
+
+  useEffect(() => {
+    transcriptRef.current = transcript
+  }, [transcript])
 
   useEffect(() => {
     getSnapshotRef.current = getSnapshot
@@ -75,7 +83,11 @@ export function useInterviewSession({
       text,
       timestamp: Date.now() - sessionStartRef.current,
     }
-    setTranscript((current) => [...current, entry])
+    setTranscript((current) => {
+      const next = [...current, entry]
+      transcriptRef.current = next
+      return next
+    })
     return entry
   }, [])
 
@@ -127,6 +139,7 @@ export function useInterviewSession({
       setPhase('speaking')
       await speak(reply)
       if (pausedRef.current) return
+      await speechResumeRef.current?.()
       setPhase('listening')
     },
     [appendTranscript, speak],
@@ -143,7 +156,7 @@ export function useInterviewSession({
       setPhase('thinking')
 
       const candidateEntry = appendTranscript('candidate', text)
-      const transcriptForTurn = [...transcript, candidateEntry]
+      const transcriptForTurn = [...transcriptRef.current, candidateEntry]
 
       try {
         const turn = await requestInterviewTurn(buildTurnRequest(text, transcriptForTurn))
@@ -158,14 +171,7 @@ export function useInterviewSession({
         processingRef.current = false
       }
     },
-    [appendTranscript, buildTurnRequest, deliverReply, paused, transcript],
-  )
-
-  const submitMessage = useCallback(
-    (text: string) => {
-      void handleCandidateMessage(text)
-    },
-    [handleCandidateMessage],
+    [appendTranscript, buildTurnRequest, deliverReply, paused],
   )
 
   const canListen =
@@ -173,7 +179,8 @@ export function useInterviewSession({
     !paused &&
     conversationStartedRef.current &&
     phase === 'listening' &&
-    !isSpeaking
+    !isSpeaking &&
+    !processingRef.current
 
   const speech = useWhisperCapture({
     enabled: canListen,
@@ -181,32 +188,49 @@ export function useInterviewSession({
     onUtterance: (text) => {
       void handleCandidateMessage(text)
     },
+    onError: (message) => {
+      setError(message)
+      setPhase('listening')
+    },
   })
+
+  speechResumeRef.current = speech.resumeAudioContext
 
   const startSession = useCallback(async () => {
     setPhase('starting')
     setError(null)
     setTranscript([])
+    transcriptRef.current = []
     setHintLevel(0)
     codeAtLastTurnRef.current = getSnapshotRef.current().code
     sessionStartRef.current = Date.now()
     lastCandidateSpeechRef.current = Date.now()
     conversationStartedRef.current = false
     processingRef.current = false
-
-    const opening = getSessionOpening(questionContext)
+    interviewerNameRef.current = pickInterviewerName()
 
     try {
+      const openingTurn = await requestSessionOpening(
+        questionContext,
+        interviewerNameRef.current,
+      )
+      const opening = openingTurn.reply
+
       setPhase('speaking')
       await speak(opening)
       if (pausedRef.current) return
       appendTranscript('interviewer', opening)
+      await speechResumeRef.current?.()
       conversationStartedRef.current = true
       setPhase('listening')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not play the introduction.'
       if (message.includes('Play introduction')) {
-        appendTranscript('interviewer', opening)
+        const fallback = await requestSessionOpening(
+          questionContext,
+          interviewerNameRef.current,
+        )
+        appendTranscript('interviewer', fallback.reply)
         conversationStartedRef.current = true
         setPhase('listening')
         setError(message)
@@ -250,6 +274,7 @@ export function useInterviewSession({
     setPhase('speaking')
     try {
       await playPending()
+      await speechResumeRef.current?.()
       conversationStartedRef.current = true
       setPhase('listening')
     } catch (err) {
@@ -264,11 +289,9 @@ export function useInterviewSession({
     isSpeaking,
     isBusy,
     isListening: speech.isListening && canListen,
-    interimTranscript: speech.interimTranscript,
     speechSupported: speech.isSupported,
     playBlocked,
     retryStart,
     playIntroduction,
-    submitMessage,
   }
 }
