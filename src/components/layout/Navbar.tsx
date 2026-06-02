@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useSignInModal } from '../../context/SignInModalContext'
+import { usePracticeAttemptOptional } from '../../context/PracticeAttemptContext'
 import { stopAllInterviewAudio } from '../../hooks/useInterviewerTTS'
 import { navLinks } from '../../data/nav'
 import { PrepifyLogo } from '../brand/PrepifyLogo'
 import { NavLinkItem } from './NavLinkItem'
-import { Button } from '../ui/Button'
 
 export function Navbar() {
   const { user, signOut } = useAuth()
@@ -20,6 +20,7 @@ export function Navbar() {
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
+  const practiceAttempt = usePracticeAttemptOptional()
 
   const handleSignOut = async () => {
     setProfileOpen(false)
@@ -36,7 +37,6 @@ export function Navbar() {
 
   const isHome = location.pathname === '/'
   const isPractice = location.pathname.startsWith('/practice/')
-  const isQuestionsPage = location.pathname === '/questions'
   const isDashboard = location.pathname === '/dashboard'
 
   const goToDashboard = () => {
@@ -91,6 +91,7 @@ export function Navbar() {
 
   const handleBackToQuestions = () => {
     stopAllInterviewAudio()
+    void practiceAttempt?.abandonSession()
     navigate('/questions')
   }
 
@@ -106,15 +107,8 @@ export function Navbar() {
     </button>
   )
 
-  const startPracticingButton = !isQuestionsPage ? (
-    <Button to="/questions" variant={user ? 'primary' : 'secondary'}>
-      Start Practicing
-    </Button>
-  ) : null
-
   const authButtonsDesktop = user ? (
     <div className="flex items-center gap-4">
-      {startPracticingButton}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -152,7 +146,6 @@ export function Navbar() {
     </div>
   ) : (
     <div className="flex items-center gap-3">
-      {startPracticingButton}
       <button
         type="button"
         onClick={() => openSignIn({ initialMode: 'signup' })}
@@ -242,11 +235,6 @@ export function Navbar() {
                     <User className="h-4 w-4 text-accent-blue" />
                     Signed in as {user.name}
                   </button>
-                  {!isQuestionsPage && (
-                    <Button to="/questions" variant="primary" className="w-full">
-                      Start Practicing
-                    </Button>
-                  )}
                   <button
                     type="button"
                     onClick={requestSignOut}
@@ -258,11 +246,6 @@ export function Navbar() {
                 </>
               ) : (
                 <>
-                  {!isQuestionsPage && (
-                    <Button to="/questions" variant="secondary" className="w-full">
-                      Start Practicing
-                    </Button>
-                  )}
                   <button
                     type="button"
                     onClick={() => {

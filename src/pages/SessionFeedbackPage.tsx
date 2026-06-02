@@ -7,7 +7,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useLocation, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
   FeedbackSectionCard,
   OptimizationExtras,
@@ -18,18 +18,20 @@ import { GradientText } from '../components/ui/GradientText'
 import { useAuth } from '../context/AuthContext'
 import { getQuestionBySlug } from '../data/questions'
 import { requestInterviewFeedback } from '../lib/feedbackApi'
-import { getLatestFeedbackForQuestion, saveFeedbackHistory } from '../lib/feedbackHistory'
+import {
+  buildFeedbackRequestFromAttempt,
+  buildFinalizeSnapshotFromAttempt,
+  finalizePracticeAttempt,
+  getPracticeAttempt,
+  saveAttemptFeedback,
+} from '../lib/practiceAttempts'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { scrollToTop } from '../lib/scrollToTop'
 import {
   RECOMMENDATION_LABELS,
   type FeedbackRecommendation,
 } from '../prompts/interviewer/feedbackRubric'
-import type {
-  FeedbackNavigationState,
-  FeedbackViewState,
-  InterviewFeedbackRequest,
-  InterviewFeedbackResult,
-} from '../types/feedback'
+import type { InterviewFeedbackResult } from '../types/feedback'
 
 const recommendationStyles: Record<FeedbackRecommendation, string> = {
   strong_hire: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
@@ -40,49 +42,79 @@ const recommendationStyles: Record<FeedbackRecommendation, string> = {
 }
 
 export function SessionFeedbackPage() {
-  const { slug } = useParams<{ slug: string }>()
-  const location = useLocation()
-  const { user } = useAuth()
+  const { attemptId } = useParams<{ attemptId: string }>()
+  const { user, isLoading: authLoading } = useAuth()
 
-  const navState = location.state as FeedbackNavigationState | FeedbackViewState | null
-
-  const [feedback, setFeedback] = useState<InterviewFeedbackResult | null>(
-    navState && 'feedback' in navState ? navState.feedback : null,
-  )
-  const [questionMeta, setQuestionMeta] = useState(
-    navState?.question ??
-      (slug && getQuestionBySlug(slug)
-        ? {
-            slug,
-            title: getQuestionBySlug(slug)!.title,
-            difficulty: getQuestionBySlug(slug)!.difficulty,
-            category: getQuestionBySlug(slug)!.category,
-          }
-        : null),
-  )
-  const [isLoading, setIsLoading] = useState(false)
+  const [feedback, setFeedback] = useState<InterviewFeedbackResult | null>(null)
+  const [questionSlug, setQuestionSlug] = useState<string | null>(null)
+  const [questionTitle, setQuestionTitle] = useState('')
+  const [questionDifficulty, setQuestionDifficulty] = useState<
+    'Easy' | 'Medium' | 'Hard'
+  >('Medium')
+  const [questionCategory, setQuestionCategory] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const pendingRequest =
-    navState && 'request' in navState ? navState.request : undefined
-
   const fetchFeedback = useCallback(
-    async (request: InterviewFeedbackRequest) => {
+    async (attemptIdValue: string, userId: string) => {
       setIsLoading(true)
       setError(null)
+
       try {
+        let attempt = await getPracticeAttempt(attemptIdValue, userId)
+        if (!attempt) {
+          setError('Session not found.')
+          return
+        }
+
+        if (attempt.status === 'abandoned') {
+          const promoted = await finalizePracticeAttempt(
+            attemptIdValue,
+            userId,
+            'completed',
+            buildFinalizeSnapshotFromAttempt(attempt),
+          )
+          if (promoted.status !== 'completed') {
+            setError(
+              'This session was not saved as submitted. Start a new practice session and use Submit when you finish.',
+            )
+            return
+          }
+          attempt = { ...promoted, attempt_feedback: attempt.attempt_feedback }
+        }
+
+        if (attempt.status !== 'completed') {
+          setError('Feedback is only available for submitted sessions.')
+          return
+        }
+
+        setQuestionSlug(attempt.question_slug)
+        setQuestionTitle(attempt.question_title)
+        setQuestionDifficulty(attempt.difficulty)
+        setQuestionCategory(attempt.category)
+
+        if (attempt.attempt_feedback) {
+          setFeedback(attempt.attempt_feedback.feedback)
+          return
+        }
+
+        const catalog = getQuestionBySlug(attempt.question_slug)
+        const request = buildFeedbackRequestFromAttempt(
+          attempt,
+          catalog?.description ?? attempt.question_title,
+          catalog?.constraints,
+        )
+
         const result = await requestInterviewFeedback(request)
         setFeedback(result)
-        if (user && questionMeta) {
-          saveFeedbackHistory(user.id, questionMeta, result)
-        }
+        await saveAttemptFeedback(attemptIdValue, userId, result)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not generate interview feedback.')
       } finally {
         setIsLoading(false)
       }
     },
-    [user, questionMeta],
+    [],
   )
 
   useEffect(() => {
@@ -90,39 +122,36 @@ export function SessionFeedbackPage() {
   }, [])
 
   useEffect(() => {
-    if (feedback || isLoading) return
+    if (authLoading) return
 
-    if (pendingRequest) {
-      void fetchFeedback(pendingRequest)
+    if (!attemptId) {
+      setError('Invalid session link.')
+      setIsLoading(false)
       return
     }
 
-    if (user && slug) {
-      const cached = getLatestFeedbackForQuestion(user.id, slug)
-      if (cached) {
-        setFeedback(cached.feedback)
-        setQuestionMeta({
-          slug: cached.slug,
-          title: cached.title,
-          difficulty: cached.difficulty,
-          category: cached.category,
-        })
-        return
-      }
+    if (!user) {
+      setError('Sign in to view feedback.')
+      setIsLoading(false)
+      return
     }
 
-    if (!pendingRequest && !feedback) {
-      setError('No feedback data for this session. Submit from a practice session to generate a report.')
+    if (!isSupabaseConfigured()) {
+      setError('Database is not configured.')
+      setIsLoading(false)
+      return
     }
-  }, [feedback, isLoading, pendingRequest, user, slug, fetchFeedback])
 
-  if (!slug || !questionMeta) {
+    void fetchFeedback(attemptId, user.id)
+  }, [attemptId, user, authLoading, fetchFeedback])
+
+  if (!attemptId) {
     return (
       <main className="relative pt-28 pb-20">
         <div className="mx-auto max-w-lg px-4 text-center">
-          <p className="text-text-secondary">Question not found.</p>
-          <Button to="/questions" variant="primary" className="mt-4">
-            Back to questions
+          <p className="text-text-secondary">Invalid session.</p>
+          <Button to="/dashboard" variant="primary" className="mt-4">
+            Dashboard
           </Button>
         </div>
       </main>
@@ -143,12 +172,14 @@ export function SessionFeedbackPage() {
             Interview feedback
           </p>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            <GradientText as="span">{questionMeta.title}</GradientText>
+            <GradientText as="span">{questionTitle || 'Your session'}</GradientText>
           </h1>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge label={questionMeta.difficulty} variant={questionMeta.difficulty} />
-            <span className="text-sm text-text-secondary">{questionMeta.category}</span>
-          </div>
+          {questionTitle && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge label={questionDifficulty} variant={questionDifficulty} />
+              <span className="text-sm text-text-secondary">{questionCategory}</span>
+            </div>
+          )}
         </motion.div>
 
         {isLoading && (
@@ -166,21 +197,23 @@ export function SessionFeedbackPage() {
             <AlertCircle className="mx-auto h-8 w-8 text-rose-400" />
             <p className="mt-3 text-sm text-rose-200">{error}</p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
-              {pendingRequest && (
+              {user && (
                 <button
                   type="button"
-                  onClick={() => void fetchFeedback(pendingRequest)}
+                  onClick={() => void fetchFeedback(attemptId, user.id)}
                   className="text-sm font-medium text-accent-blue hover:underline"
                 >
                   Try again
                 </button>
               )}
-              <Button to={`/practice/${slug}`} variant="secondary">
-                Return to session
+              <Button to="/dashboard" variant="secondary">
+                Dashboard
               </Button>
-              <Button to="/questions" variant="primary">
-                Browse questions
-              </Button>
+              {questionSlug && (
+                <Button to={`/practice/${questionSlug}`} variant="primary">
+                  Practice again
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -235,9 +268,11 @@ export function SessionFeedbackPage() {
               <Button to="/dashboard" variant="secondary">
                 View dashboard
               </Button>
-              <Button to={`/practice/${slug}`} variant="ghost">
-                Practice again
-              </Button>
+              {questionSlug && (
+                <Button to={`/practice/${questionSlug}`} variant="ghost">
+                  Practice again
+                </Button>
+              )}
               <Button to="/questions" variant="primary">
                 Browse questions
               </Button>
