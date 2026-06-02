@@ -43,6 +43,7 @@ function statusLabel(
   if (isListening || phase === 'listening') return 'Listening…'
   if (phase === 'starting') return 'Preparing voice…'
   if (phase === 'error') return 'Voice unavailable'
+  if (phase === 'complete') return 'Session complete'
   return 'Ready'
 }
 

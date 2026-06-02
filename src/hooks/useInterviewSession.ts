@@ -128,6 +128,7 @@ export function useInterviewSession({
   const pendingOpeningRef = useRef<string | null>(null)
   const resumePauseSecondsRef = useRef(0)
   const prevPausedRef = useRef(paused)
+  const sessionEndedRef = useRef(false)
 
   useEffect(() => {
     pausedRef.current = paused
@@ -307,9 +308,11 @@ export function useInterviewSession({
   const micActive =
     enabled &&
     !paused &&
+    !sessionEndedRef.current &&
     conversationStarted &&
     phase !== 'error' &&
-    phase !== 'starting'
+    phase !== 'starting' &&
+    phase !== 'complete'
 
   const vadEnabled = micActive && phase === 'listening' && !isSpeaking
 
@@ -348,6 +351,7 @@ export function useInterviewSession({
     lastCandidateSpeechRef.current = Date.now()
     setConversationStarted(false)
     processingRef.current = false
+    sessionEndedRef.current = false
     pendingOpeningRef.current = null
     resumePauseSecondsRef.current = 0
     pauseStartedAtRef.current = null
@@ -456,6 +460,7 @@ export function useInterviewSession({
 
   const retryStart = useCallback(() => {
     sessionRunIdRef.current += 1
+    sessionEndedRef.current = false
     ttsStopRef.current()
     speechStopRef.current()
     pendingOpeningRef.current = null
@@ -483,6 +488,15 @@ export function useInterviewSession({
     }
   }, [playPending])
 
+  const endSession = useCallback(() => {
+    sessionEndedRef.current = true
+    sessionRunIdRef.current += 1
+    ttsStopRef.current()
+    speechStopRef.current()
+    processingRef.current = false
+    setPhase('complete')
+  }, [])
+
   return {
     phase,
     error,
@@ -491,7 +505,10 @@ export function useInterviewSession({
     isListening: speech.isListening && vadEnabled,
     speechSupported: speech.isSupported,
     playBlocked,
+    transcript,
+    hintLevel,
     retryStart,
     playIntroduction,
+    endSession,
   }
 }
