@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
-import { ArrowLeft, LogIn, LogOut, Menu, User, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, LogIn, LogOut, Menu, User, UserPlus, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useSignInModal } from '../../context/SignInModalContext'
@@ -16,15 +16,20 @@ export function Navbar() {
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
 
   const handleSignOut = async () => {
+    setProfileOpen(false)
+    setMobileOpen(false)
     await signOut()
     navigate('/')
   }
 
   const isHome = location.pathname === '/'
   const isPractice = location.pathname.startsWith('/practice/')
+  const isQuestionsPage = location.pathname === '/questions'
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -34,7 +39,21 @@ export function Navbar() {
 
   useEffect(() => {
     setMobileOpen(false)
+    setProfileOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!profileOpen) return
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setProfileOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [profileOpen])
 
   const showBlur = scrolled || !isHome || isPractice
 
@@ -55,6 +74,64 @@ export function Navbar() {
       <span className="hidden sm:inline">Back to questions</span>
       <span className="sm:hidden">Back</span>
     </button>
+  )
+
+  const startPracticingButton = !isQuestionsPage ? (
+    <Button to="/questions" variant={user ? 'primary' : 'secondary'}>
+      Start Practicing
+    </Button>
+  ) : null
+
+  const authButtonsDesktop = user ? (
+    <div className="flex items-center gap-4">
+      {startPracticingButton}
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-text-secondary">{user.name.split(' ')[0]}</span>
+        <div ref={profileRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setProfileOpen((open) => !open)}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-accent-blue transition-colors hover:bg-white/10"
+            aria-label="Account menu"
+            aria-expanded={profileOpen}
+          >
+            <User className="h-4 w-4" />
+          </button>
+          {profileOpen && (
+            <div className="absolute top-full right-0 z-50 mt-2 min-w-[10rem] rounded-xl border border-white/10 bg-bg-secondary py-1 shadow-xl">
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="flex items-center gap-3">
+      {startPracticingButton}
+      <button
+        type="button"
+        onClick={() => openSignIn({ initialMode: 'signup' })}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/5"
+      >
+        <UserPlus className="h-4 w-4" />
+        Sign up
+      </button>
+      <button
+        type="button"
+        onClick={() => openSignIn({ initialMode: 'signin' })}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2 text-sm font-medium text-white shadow-lg shadow-accent-blue/25 transition-opacity hover:opacity-90"
+      >
+        <LogIn className="h-4 w-4" />
+        Log in
+      </button>
+    </div>
   )
 
   return (
@@ -88,41 +165,7 @@ export function Navbar() {
             ))}
           </div>
 
-          <div className="hidden items-center gap-4 md:flex">
-            {user ? (
-              <>
-                <span className="flex items-center gap-2 text-sm text-text-secondary">
-                  <User className="h-4 w-4 text-accent-blue" />
-                  {user.name.split(' ')[0]}
-                </span>
-                <Button to="/questions" variant="primary">
-                  Start Practicing
-                </Button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <>
-                <Button to="/questions" variant="secondary">
-                  Start Practicing
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => openSignIn()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2 text-sm font-medium text-white shadow-lg shadow-accent-blue/25 transition-opacity hover:opacity-90"
-                >
-                  <LogIn className="h-4 w-4" />
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
+          <div className="hidden md:flex">{authButtonsDesktop}</div>
 
           <button
             type="button"
@@ -156,9 +199,11 @@ export function Navbar() {
                   <User className="h-4 w-4 text-accent-blue" />
                   Signed in as {user.name}
                 </p>
-                <Button to="/questions" variant="primary" className="w-full">
-                  Start Practicing
-                </Button>
+                {!isQuestionsPage && (
+                  <Button to="/questions" variant="primary" className="w-full">
+                    Start Practicing
+                  </Button>
+                )}
                 <button
                   type="button"
                   onClick={handleSignOut}
@@ -170,16 +215,32 @@ export function Navbar() {
               </>
             ) : (
               <>
-                <Button to="/questions" variant="secondary" className="w-full">
-                  Start Practicing
-                </Button>
+                {!isQuestionsPage && (
+                  <Button to="/questions" variant="secondary" className="w-full">
+                    Start Practicing
+                  </Button>
+                )}
                 <button
                   type="button"
-                  onClick={() => openSignIn()}
+                  onClick={() => {
+                    openSignIn({ initialMode: 'signup' })
+                    setMobileOpen(false)
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-medium text-text-primary hover:bg-white/5"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Sign up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openSignIn({ initialMode: 'signin' })
+                    setMobileOpen(false)
+                  }}
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple py-2.5 text-sm font-medium text-white"
                 >
                   <LogIn className="h-4 w-4" />
-                  Sign in
+                  Log in
                 </button>
               </>
             )}

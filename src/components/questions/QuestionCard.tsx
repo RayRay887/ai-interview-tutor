@@ -61,7 +61,7 @@ export function QuestionCard({ question, index }: QuestionCardProps) {
 
       <div className="mt-6">
         <Button onClick={handleStartPracticing} variant="primary" className="w-full">
-          Start Practicing
+          Start
         </Button>
       </div>
     </motion.article>
