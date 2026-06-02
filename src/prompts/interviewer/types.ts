@@ -66,6 +66,8 @@ export interface InterviewerSignals {
   silenceSeconds: number
   testsJustRun: boolean
   candidateAskedForHint: boolean
+  approachClarity?: 'vague' | 'partial' | 'concrete'
+  approachProbeCount?: number
 }
 
 export interface InterviewerHintState {

@@ -6,6 +6,7 @@ interface UseMicrophoneMonitorOptions {
   onMicLost: () => void
 }
 
+/** Polls device list only — does not open a second mic stream (avoids conflicting with Whisper). */
 export function useMicrophoneMonitor({
   deviceId,
   enabled,
@@ -20,8 +21,6 @@ export function useMicrophoneMonitor({
   useEffect(() => {
     if (!enabled || !deviceId) return
 
-    let stream: MediaStream | null = null
-    let pollId: number | null = null
     let cancelled = false
     let notified = false
 
@@ -45,43 +44,13 @@ export function useMicrophoneMonitor({
       }
     }
 
-    const start = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { deviceId: { exact: deviceId } },
-        })
-
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-
-        const track = stream.getAudioTracks()[0]
-        if (!track) {
-          notifyLost()
-          return
-        }
-
-        track.onended = () => notifyLost()
-        track.onmute = () => notifyLost()
-
-        pollId = window.setInterval(() => {
-          if (!track.enabled || track.readyState === 'ended' || track.muted) {
-            notifyLost()
-          }
-        }, 800)
-      } catch {
-        notifyLost()
-      }
-    }
-
-    void start()
+    void verifyDeviceStillPresent()
+    const pollId = window.setInterval(() => void verifyDeviceStillPresent(), 2000)
     navigator.mediaDevices.addEventListener('devicechange', verifyDeviceStillPresent)
 
     return () => {
       cancelled = true
-      if (pollId !== null) window.clearInterval(pollId)
-      stream?.getTracks().forEach((track) => track.stop())
+      window.clearInterval(pollId)
       navigator.mediaDevices.removeEventListener('devicechange', verifyDeviceStillPresent)
     }
   }, [deviceId, enabled])

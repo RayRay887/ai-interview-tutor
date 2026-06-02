@@ -25,7 +25,7 @@ function stopActiveAudio() {
   }
 }
 
-function playBlob(blob: Blob, generation: number): Promise<void> {
+function playBlobInternal(blob: Blob, generation: number): Promise<void> {
   return new Promise((resolve, reject) => {
     if (generation !== speakGeneration) {
       resolve()
@@ -79,21 +79,22 @@ export function useInterviewerTTS() {
     setIsSpeaking(false)
   }, [])
 
-  const speak = useCallback(async (text: string) => {
+  const prefetchSpeech = useCallback(async (text: string): Promise<Blob> => {
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      throw new Error('No text to speak.')
+    }
+    return requestSpeechAudio(trimmed)
+  }, [])
 
+  const playSpeechBlob = useCallback(async (blob: Blob) => {
     const generation = ++speakGeneration
     setPlayBlocked(false)
     setIsSpeaking(true)
 
     try {
-      const blob = await requestSpeechAudio(trimmed)
-      if (generation !== speakGeneration) return
-
       pendingBlobRef.current = blob
-      await playBlob(blob, generation)
-
+      await playBlobInternal(blob, generation)
       if (generation !== speakGeneration) return
       pendingBlobRef.current = null
       setPlayBlocked(false)
@@ -113,26 +114,30 @@ export function useInterviewerTTS() {
     }
   }, [])
 
+  const speak = useCallback(
+    async (text: string) => {
+      const blob = await prefetchSpeech(text)
+      await playSpeechBlob(blob)
+    },
+    [prefetchSpeech, playSpeechBlob],
+  )
+
   const playPending = useCallback(async () => {
     const blob = pendingBlobRef.current
     if (!blob) return
-
-    const generation = ++speakGeneration
-    setIsSpeaking(true)
-    setPlayBlocked(false)
-
-    try {
-      await playBlob(blob, generation)
-      if (generation !== speakGeneration) return
-      pendingBlobRef.current = null
-    } finally {
-      if (generation === speakGeneration) {
-        setIsSpeaking(false)
-      }
-    }
-  }, [])
+    await playSpeechBlob(blob)
+  }, [playSpeechBlob])
 
   useEffect(() => () => stop(), [stop])
 
-  return { speak, stop, isSpeaking, playBlocked, playPending, hasPendingAudio: playBlocked }
+  return {
+    speak,
+    prefetchSpeech,
+    playSpeechBlob,
+    stop,
+    isSpeaking,
+    playBlocked,
+    playPending,
+    hasPendingAudio: playBlocked,
+  }
 }

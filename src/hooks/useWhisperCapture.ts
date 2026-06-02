@@ -2,42 +2,44 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { requestTranscription, TranscriptionError } from '../lib/interviewApi'
 
 interface UseWhisperCaptureOptions {
-  enabled: boolean
+  /** Keep the mic stream open for the session. */
+  active: boolean
+  /** When false, stream stays open but end-of-speech detection is paused. */
+  vadEnabled: boolean
   deviceId: string
   onUtterance: (text: string) => void
   onError?: (message: string) => void
-  /** Base pause length before end-of-speech (ms). Grows for longer turns. */
+  onMicLost?: () => void
   silenceMs?: number
   minSpeechMs?: number
-  /** Force-send after this much continuous capture (ms). */
   maxUtteranceMs?: number
 }
 
-/** RMS above this → treat as speech (start / continue). */
-const SPEECH_ON_THRESHOLD = 0.022
-/** RMS below this for several frames → treat as quiet (hysteresis). */
-const SPEECH_OFF_THRESHOLD = 0.013
-/** Consecutive quiet frames (~10–15 at 60fps) before a dip counts as silence. */
-const QUIET_FRAMES_TO_END_SPEECH = 12
+const SPEECH_ON_THRESHOLD = 0.018
+const SPEECH_OFF_THRESHOLD = 0.011
+const QUIET_FRAMES_TO_END_SPEECH = 10
 
 function closeAudioContext(ctx: AudioContext | null) {
   if (!ctx || ctx.state === 'closed') return
   void ctx.close().catch(() => undefined)
 }
 
-/** Longer explanations need longer pauses before we assume they are done. */
 function adaptiveSilenceMs(turnDurationMs: number, baseSilenceMs: number): number {
-  if (turnDurationMs < 4000) return baseSilenceMs
-  if (turnDurationMs < 12000) return baseSilenceMs + 800
-  if (turnDurationMs < 25000) return baseSilenceMs + 1600
-  return baseSilenceMs + 2400
+  const base =
+    turnDurationMs < 6000 ? Math.min(baseSilenceMs, 1600) : baseSilenceMs
+  if (turnDurationMs < 4000) return base
+  if (turnDurationMs < 12000) return base + 800
+  if (turnDurationMs < 25000) return base + 1600
+  return base + 2400
 }
 
 export function useWhisperCapture({
-  enabled,
+  active,
+  vadEnabled,
   deviceId,
   onUtterance,
   onError,
+  onMicLost,
   silenceMs = 2800,
   minSpeechMs = 400,
   maxUtteranceMs = 45000,
@@ -52,7 +54,9 @@ export function useWhisperCapture({
 
   const onUtteranceRef = useRef(onUtterance)
   const onErrorRef = useRef(onError)
-  const enabledRef = useRef(enabled)
+  const onMicLostRef = useRef(onMicLost)
+  const activeRef = useRef(active)
+  const vadEnabledRef = useRef(vadEnabled)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -79,8 +83,23 @@ export function useWhisperCapture({
   }, [onError])
 
   useEffect(() => {
-    enabledRef.current = enabled
-  }, [enabled])
+    onMicLostRef.current = onMicLost
+  }, [onMicLost])
+
+  useEffect(() => {
+    activeRef.current = active
+  }, [active])
+
+  useEffect(() => {
+    vadEnabledRef.current = vadEnabled
+    if (!vadEnabled) {
+      silenceStartRef.current = null
+      speechStartRef.current = null
+      hadSpeechRef.current = false
+      inSpeechZoneRef.current = false
+      quietStreakRef.current = 0
+    }
+  }, [vadEnabled])
 
   useEffect(() => {
     silenceMsRef.current = silenceMs
@@ -121,7 +140,7 @@ export function useWhisperCapture({
 
   const startRecorder = useCallback(() => {
     const stream = streamRef.current
-    if (!stream || !enabledRef.current) return
+    if (!stream || !activeRef.current) return
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
@@ -139,7 +158,7 @@ export function useWhisperCapture({
   }, [])
 
   const flushUtterance = useCallback(async () => {
-    if (processingRef.current) return
+    if (processingRef.current || !vadEnabledRef.current) return
     if (!hadSpeechRef.current && chunksRef.current.length === 0) return
 
     processingRef.current = true
@@ -151,7 +170,11 @@ export function useWhisperCapture({
 
     try {
       if (blob.size > 0) {
+        const whisperStart = performance.now()
         const text = await requestTranscription(blob)
+        if (import.meta.env.DEV) {
+          console.debug('[voice-turn] whisperMs', Math.round(performance.now() - whisperStart))
+        }
         if (text.trim().length >= 2) {
           onUtteranceRef.current(text.trim())
         }
@@ -166,7 +189,7 @@ export function useWhisperCapture({
       onErrorRef.current?.(message)
     } finally {
       processingRef.current = false
-      if (enabledRef.current && streamRef.current) {
+      if (activeRef.current && streamRef.current) {
         startRecorder()
         scheduleMonitor()
       }
@@ -177,8 +200,13 @@ export function useWhisperCapture({
 
   monitorLevelRef.current = () => {
     const analyser = analyserRef.current
-    if (!analyser || !enabledRef.current) {
+    if (!analyser || !activeRef.current) {
       rafRef.current = null
+      return
+    }
+
+    if (!vadEnabledRef.current || processingRef.current) {
+      rafRef.current = requestAnimationFrame(monitorLevelRef.current)
       return
     }
 
@@ -211,10 +239,10 @@ export function useWhisperCapture({
       speechStartRef.current ??= now
 
       const turnDurationMs = now - (speechStartRef.current ?? now)
-      if (turnDurationMs >= maxUtteranceMsRef.current && !processingRef.current) {
+      if (turnDurationMs >= maxUtteranceMsRef.current) {
         void flushUtterance()
       }
-    } else if (hadSpeechRef.current && !processingRef.current) {
+    } else if (hadSpeechRef.current) {
       silenceStartRef.current ??= now
       const silentFor = now - (silenceStartRef.current ?? now)
       const turnDurationMs = now - (speechStartRef.current ?? now)
@@ -251,15 +279,19 @@ export function useWhisperCapture({
   }, [resetSpeechMarkers, stopRecorder])
 
   const start = useCallback(async () => {
-    if (!isSupported || !enabledRef.current || !deviceId) return
-
-    cleanupStream()
+    if (!isSupported || !activeRef.current || !deviceId) return
+    if (streamRef.current) return
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { deviceId: { exact: deviceId } },
       })
       streamRef.current = stream
+
+      const track = stream.getAudioTracks()[0]
+      if (track) {
+        track.onended = () => onMicLostRef.current?.()
+      }
 
       const audioContext = new AudioContext()
       audioContextRef.current = audioContext
@@ -286,21 +318,22 @@ export function useWhisperCapture({
     cleanupStream()
   }, [cleanupStream])
 
-  const resumeAudioContext = useCallback(async () => {
-    const ctx = audioContextRef.current
-    if (ctx && ctx.state === 'suspended') {
-      await ctx.resume()
-    }
-  }, [])
-
   useEffect(() => {
-    if (enabled && isSupported && deviceId) {
+    if (active && isSupported && deviceId) {
       void start()
       return () => stop()
     }
     stop()
     return undefined
-  }, [enabled, isSupported, deviceId, start, stop])
+  }, [active, isSupported, deviceId, start, stop])
+
+  const resumeAudioContext = useCallback(async () => {
+    const ctx = audioContextRef.current
+    if (!ctx || ctx.state === 'closed') return
+    if (ctx.state === 'suspended') {
+      await ctx.resume()
+    }
+  }, [])
 
   return useMemo(
     () => ({
