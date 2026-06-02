@@ -346,6 +346,195 @@ Respond to the candidate. Follow approachClarity rules. Return JSON only.`
   }
 }
 
+function openAiInterviewFeedbackDevProxy(env: Record<string, string>): Plugin {
+  const apiKey = env.OPENAI_API_KEY
+  const feedbackModel = env.OPENAI_FEEDBACK_MODEL ?? env.OPENAI_INTERVIEW_MODEL ?? 'gpt-4o-mini'
+
+  const criterionItem = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'score', 'summary'],
+    properties: {
+      id: { type: 'string' },
+      score: { type: 'integer' },
+      summary: { type: 'string' },
+    },
+  }
+
+  const sectionSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['criteria', 'strengths', 'improvements'],
+    properties: {
+      criteria: { type: 'array', items: criterionItem },
+      strengths: { type: 'array', items: { type: 'string' } },
+      improvements: { type: 'array', items: { type: 'string' } },
+    },
+  }
+
+  const feedbackJsonSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['code', 'interview', 'optimization', 'recommendation', 'headline'],
+    properties: {
+      code: sectionSchema,
+      interview: sectionSchema,
+      optimization: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'criteria',
+          'strengths',
+          'improvements',
+          'timeComplexity',
+          'spaceComplexity',
+          'isOptimal',
+          'optimizationSummary',
+        ],
+        properties: {
+          criteria: { type: 'array', items: criterionItem },
+          strengths: { type: 'array', items: { type: 'string' } },
+          improvements: { type: 'array', items: { type: 'string' } },
+          timeComplexity: { type: 'string' },
+          spaceComplexity: { type: 'string' },
+          isOptimal: { type: 'boolean' },
+          optimizationSummary: { type: 'string' },
+        },
+      },
+      recommendation: {
+        type: 'string',
+        enum: ['strong_hire', 'hire', 'lean_hire', 'lean_no_hire', 'no_hire'],
+      },
+      headline: { type: 'string' },
+    },
+  }
+
+  const SYSTEM_PROMPT = `You are a senior FAANG hiring committee member writing a post-interview debrief. Return three sections:
+
+CODE (grade from code + tests only): code_quality, testing, edge_cases — each 1-4 with summary.
+INTERVIEW (grade from transcript only): approach_explanation, logic_clarity, communication, collaboration — each 1-4.
+OPTIMIZATION: time_complexity, space_complexity, optimization criteria plus timeComplexity, spaceComplexity strings (e.g. "O(n)"), isOptimal boolean, optimizationSummary.
+
+Scale: 1=No Hire, 2=Lean No Hire, 3=Hire, 4=Strong Hire per criterion. Calibrate strictly — passing tests alone ≠ 4s.
+Each section needs 2-4 strengths and 2-4 improvements strings.`
+
+  return {
+    name: 'openai-interview-feedback-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const pathname = req.url?.split('?')[0] ?? ''
+        if (pathname !== '/api/interview-feedback' || req.method !== 'POST') {
+          next()
+          return
+        }
+
+        if (!apiKey) {
+          res.statusCode = 503
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Add OPENAI_API_KEY to your .env file.' }))
+          return
+        }
+
+        try {
+          const chunks: Buffer[] = []
+          await new Promise<void>((resolve, reject) => {
+            req.on('data', (chunk) => chunks.push(chunk))
+            req.on('end', () => resolve())
+            req.on('error', reject)
+          })
+
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+            question?: { title?: string; description?: string; difficulty?: string; category?: string }
+            code?: { source?: string; language?: string }
+            tests?: Record<string, unknown>
+            transcript?: { role: string; text: string }[]
+            session?: { minutesTotal?: number; minutesUsed?: number; hintsUsed?: number }
+          }
+
+          if (!body.question?.title || !body.code?.source) {
+            res.statusCode = 400
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Missing question or code.' }))
+            return
+          }
+
+          const transcript = (body.transcript ?? [])
+            .slice(-16)
+            .map((e) => `${e.role}: ${e.text}`)
+            .join('\n')
+
+          const userPrompt = `Problem: "${body.question.title}" (${body.question.difficulty}, ${body.question.category})
+Description: ${body.question.description}
+
+Session: ${body.session?.minutesUsed ?? '?'}/${body.session?.minutesTotal ?? '?'} min, hints ${body.session?.hintsUsed ?? 0}
+Tests: ${JSON.stringify(body.tests ?? {})}
+
+Code (${body.code.language}):
+${body.code.source.slice(0, 3500)}
+
+Transcript:
+${transcript || '(none — grade interview section from limited context)'}
+
+Return three-section debrief JSON.`
+
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: feedbackModel,
+              temperature: 0.3,
+              response_format: {
+                type: 'json_schema',
+                json_schema: {
+                  name: 'interview_feedback',
+                  strict: true,
+                  schema: feedbackJsonSchema,
+                },
+              },
+              messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'user', content: userPrompt },
+              ],
+            }),
+          })
+
+          if (!response.ok) {
+            const details = await response.text()
+            console.error('[openai-interview-feedback]', details)
+            res.statusCode = 502
+            res.setHeader('Content-Type', 'application/json')
+            let message = 'OpenAI feedback request failed.'
+            try {
+              const errBody = JSON.parse(details) as { error?: { message?: string } }
+              if (errBody.error?.message) message = errBody.error.message
+            } catch {
+              // ignore
+            }
+            res.end(JSON.stringify({ error: message }))
+            return
+          }
+
+          const completion = (await response.json()) as {
+            choices?: { message?: { content?: string } }[]
+          }
+
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(completion.choices?.[0]?.message?.content ?? '{}')
+        } catch (error) {
+          console.error('[openai-interview-feedback]', error)
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Feedback proxy error.' }))
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -356,6 +545,7 @@ export default defineConfig(({ mode }) => {
       openAiTtsDevProxy(env),
       openAiTranscribeDevProxy(env),
       openAiInterviewTurnDevProxy(env),
+      openAiInterviewFeedbackDevProxy(env),
     ],
   }
 })

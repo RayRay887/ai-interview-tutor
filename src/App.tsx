@@ -9,6 +9,7 @@ import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { HomePage } from './pages/HomePage'
 import { PracticePage } from './pages/PracticePage'
+import { SessionFeedbackPage } from './pages/SessionFeedbackPage'
 import { QuestionsPage } from './pages/QuestionsPage'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/questions" element={<QuestionsPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/feedback/:slug" element={<SessionFeedbackPage />} />
             </Route>
 
             <Route element={<PracticeLayout />}>

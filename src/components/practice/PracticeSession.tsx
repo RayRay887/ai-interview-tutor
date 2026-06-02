@@ -9,10 +9,12 @@ import {
   Pause,
   Play,
   Plus,
+  Sparkles,
   Trash2,
   XCircle,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   codeLanguages,
@@ -34,6 +36,8 @@ import {
   minutesToSeconds,
 } from '../../lib/questionDuration'
 import { recordQuestionCompleted, recordQuestionOpened } from '../../lib/practiceHistory'
+import { toInterviewQuestionContext } from '../../types/interview'
+import type { FeedbackNavigationState } from '../../types/feedback'
 import { CodeEditor } from './CodeEditor'
 import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
@@ -70,6 +74,7 @@ export function PracticeSession({
   userTestMode,
 }: PracticeSessionProps) {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const completedRecordedRef = useRef(false)
   const [language, setLanguage] = useState<CodeLanguage>('python')
   const [codeByLanguage, setCodeByLanguage] = useState<Partial<Record<CodeLanguage, string>>>({
@@ -318,6 +323,66 @@ export function PracticeSession({
     return () => window.clearInterval(id)
   }, [isTimerRunning])
 
+  const handleSubmitFeedback = useCallback(() => {
+    if (!user || !hasRunTests || isPaused) return
+
+    interview.endSession()
+
+    const questionContext = toInterviewQuestionContext(question)
+    const totalWithHidden = totalCount + (hiddenSummary?.total ?? 0)
+    const passedWithHidden = passedCount + (hiddenSummary?.passed ?? 0)
+    const minutesUsed = Math.max(
+      0,
+      Math.round((minutesToSeconds(sessionMinutes) - remainingSeconds) / 60),
+    )
+
+    const state: FeedbackNavigationState = {
+      request: {
+        question: questionContext,
+        code: { source: code, language },
+        tests: {
+          passed: passedWithHidden,
+          total: totalWithHidden,
+          allPassed,
+          hiddenPassed: hiddenSummary?.passed,
+          hiddenTotal: hiddenSummary?.total,
+          lastFailures: buildLastFailures(testResults, visibleTestCases),
+        },
+        transcript: interview.transcript.map(({ role, text }) => ({ role, text })),
+        session: {
+          minutesTotal: sessionMinutes,
+          minutesUsed,
+          hintsUsed: interview.hintLevel,
+        },
+      },
+      question: {
+        slug: question.slug,
+        title: question.title,
+        difficulty: question.difficulty,
+        category: question.category,
+      },
+    }
+
+    navigate(`/feedback/${question.slug}`, { state })
+  }, [
+    user,
+    hasRunTests,
+    isPaused,
+    interview,
+    question,
+    totalCount,
+    hiddenSummary,
+    passedCount,
+    sessionMinutes,
+    remainingSeconds,
+    code,
+    language,
+    allPassed,
+    testResults,
+    visibleTestCases,
+    navigate,
+  ])
+
   const renderTestStatus = (status: TestResult['status']) => {
     if (status === 'passed') {
       return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
@@ -339,7 +404,7 @@ export function PracticeSession({
         : 'Session paused. Resume when you are ready to continue.'
 
   return (
-    <div className="glass glow-blue flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+    <div className="glass glow-blue relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/80 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-text-primary">{question.title}</span>
@@ -520,14 +585,27 @@ export function PracticeSession({
                 ) : null
               }
               action={
-                <button
-                  type="button"
-                  onClick={handleRunTests}
-                  disabled={isRunningTests || isPaused}
-                  className="shrink-0 rounded-lg bg-accent-blue/20 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/30 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isRunningTests ? 'Running...' : 'Run tests'}
-                </button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {hasRunTests && (
+                    <button
+                      type="button"
+                      onClick={handleSubmitFeedback}
+                      disabled={isPaused}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/30 bg-accent-purple/15 px-3 py-1.5 text-xs font-medium text-accent-purple transition-colors hover:bg-accent-purple/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Submit for feedback
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRunTests}
+                    disabled={isRunningTests || isPaused}
+                    className="rounded-lg bg-accent-blue/20 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isRunningTests ? 'Running...' : 'Run tests'}
+                  </button>
+                </div>
               }
               contentClassName="theme-scrollbar max-h-64 overflow-y-auto p-4 pt-0"
             >

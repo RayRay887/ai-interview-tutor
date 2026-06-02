@@ -34,4 +34,5 @@ export type InterviewPhase =
   | 'listening'
   | 'thinking'
   | 'speaking'
+  | 'complete'
   | 'error'

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { BookOpen, CheckCircle2, Clock, Mail, Mic, User } from 'lucide-react'
+import { BookOpen, CheckCircle2, Clock, Mail, Mic, Sparkles, User } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
@@ -14,6 +14,12 @@ import {
   PRACTICE_HISTORY_UPDATED,
   type PracticeHistoryEntry,
 } from '../lib/practiceHistory'
+import {
+  FEEDBACK_HISTORY_UPDATED,
+  getFeedbackHistory,
+  type FeedbackHistoryEntry,
+} from '../lib/feedbackHistory'
+import { RECOMMENDATION_LABELS } from '../prompts/interviewer/feedbackRubric'
 import { scrollToTop } from '../lib/scrollToTop'
 
 function HistoryList({
@@ -62,12 +68,14 @@ export function DashboardPage() {
   const [authPrompted, setAuthPrompted] = useState(false)
   const [opened, setOpened] = useState<PracticeHistoryEntry[]>([])
   const [completed, setCompleted] = useState<PracticeHistoryEntry[]>([])
+  const [feedbackEntries, setFeedbackEntries] = useState<FeedbackHistoryEntry[]>([])
 
   const loadHistory = useCallback(() => {
     if (!user) return
     const history = getPracticeHistory(user.id)
     setOpened(history.opened)
     setCompleted(history.completed)
+    setFeedbackEntries(getFeedbackHistory(user.id))
   }, [user])
 
   useEffect(() => {
@@ -89,7 +97,11 @@ export function DashboardPage() {
     }
 
     window.addEventListener(PRACTICE_HISTORY_UPDATED, onHistoryUpdated)
-    return () => window.removeEventListener(PRACTICE_HISTORY_UPDATED, onHistoryUpdated)
+    window.addEventListener(FEEDBACK_HISTORY_UPDATED, onHistoryUpdated)
+    return () => {
+      window.removeEventListener(PRACTICE_HISTORY_UPDATED, onHistoryUpdated)
+      window.removeEventListener(FEEDBACK_HISTORY_UPDATED, onHistoryUpdated)
+    }
   }, [user, loadHistory])
 
   useEffect(() => {
@@ -240,6 +252,70 @@ export function DashboardPage() {
             />
           </motion.section>
         </div>
+
+        <motion.section
+          className="glass mt-6 rounded-2xl border border-white/10 p-6"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-blue/15 text-accent-blue">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-medium text-text-primary">Interview feedback</h2>
+              <p className="text-xs text-text-secondary">
+                FAANG-style rubric scores after you submit a session
+              </p>
+            </div>
+          </div>
+
+          {feedbackEntries.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-white/10 px-3 py-6 text-center text-sm text-text-secondary/80">
+              No feedback yet. Run tests in a session and click Submit for feedback.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {feedbackEntries.map((entry) => (
+                <li key={`${entry.slug}-${entry.timestamp}`}>
+                  <Link
+                    to={`/feedback/${entry.slug}`}
+                    state={{
+                      feedback: entry.feedback,
+                      question: {
+                        slug: entry.slug,
+                        title: entry.title,
+                        difficulty: entry.difficulty,
+                        category: entry.category,
+                      },
+                    }}
+                    className="block rounded-xl border border-white/10 bg-bg-primary/40 p-4 transition-colors hover:border-white/20 hover:bg-white/5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-text-primary">{entry.title}</p>
+                        <p className="mt-1 text-xs text-accent-blue/80">{entry.category}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-semibold text-text-primary">
+                          {entry.overallScore}/100
+                        </span>
+                        <Badge label={RECOMMENDATION_LABELS[entry.recommendation]} />
+                        <Badge label={entry.difficulty} variant={entry.difficulty} />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm text-text-secondary">{entry.headline}</p>
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-text-secondary">
+                      <Clock className="h-3.5 w-3.5" />
+                      {formatHistoryDate(entry.timestamp)}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </motion.section>
       </div>
     </main>
   )
