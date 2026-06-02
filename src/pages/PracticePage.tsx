@@ -4,6 +4,7 @@ import { MicrophoneSetupModal } from '../components/practice/MicrophoneSetupModa
 import { PracticeSession } from '../components/practice/PracticeSession'
 import { SessionSetupModal } from '../components/practice/SessionSetupModal'
 import { PracticeAttemptProvider } from '../context/PracticeAttemptContext'
+import { PracticeLeaveGuard } from '../components/practice/PracticeLeaveGuard'
 import { useAuth } from '../context/AuthContext'
 import { useSignInModal } from '../context/SignInModalContext'
 import { getQuestionBySlug } from '../data/questions'
@@ -148,6 +149,7 @@ export function PracticePage() {
 
   return (
     <PracticeAttemptProvider attemptId={attemptId}>
+      <PracticeLeaveGuard />
       <PracticeSession
         attemptId={attemptId}
         question={question}

@@ -113,7 +113,7 @@ export function PracticeSession({
 }: PracticeSessionProps) {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { registerAbandonHandler } = usePracticeAttempt()
+  const { registerAbandonHandler, setLeaveProtectionEnabled } = usePracticeAttempt()
   const exitIntentRef = useRef<'active' | 'submitting' | 'completed' | 'abandoned'>('active')
   const [language, setLanguage] = useState<CodeLanguage>('python')
   const [codeByLanguage, setCodeByLanguage] = useState<Partial<Record<CodeLanguage, string>>>({
@@ -135,6 +135,11 @@ export function PracticeSession({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const testsJustRunRef = useRef(false)
+
+  useEffect(() => {
+    setLeaveProtectionEnabled(true)
+    return () => setLeaveProtectionEnabled(false)
+  }, [setLeaveProtectionEnabled])
 
   const isPaused = pauseReason !== null
   const isTimerRunning = !isPaused && remainingSeconds > 0
@@ -469,6 +474,7 @@ export function PracticeSession({
         throw new Error('Session could not be marked as submitted. Please try again.')
       }
       exitIntentRef.current = 'completed'
+      setLeaveProtectionEnabled(false)
       navigate(`/feedback/attempt/${attemptId}`)
     } catch (err) {
       exitIntentRef.current = 'active'
@@ -479,7 +485,7 @@ export function PracticeSession({
     } finally {
       setIsSubmitting(false)
     }
-  }, [user, isSubmitting, attemptId, navigate])
+  }, [user, isSubmitting, attemptId, navigate, setLeaveProtectionEnabled])
 
   const handleConfirmSubmit = () => {
     setSubmitConfirmOpen(false)
