@@ -136,6 +136,64 @@ export function formatTotalPracticeTime(totalSeconds: number): string {
   return `${minutes} min`
 }
 
+export async function getInProgressAttemptForQuestion(
+  userId: string,
+  questionSlug: string,
+): Promise<PracticeAttemptRow | null> {
+  const client = requireSupabase()
+  const { data, error } = await client
+    .from('practice_attempts')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('question_slug', questionSlug)
+    .eq('status', 'in_progress')
+    .order('started_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return null
+  return mapAttemptRow(row as Record<string, unknown>)
+}
+
+/** Persist in-progress session state without ending the attempt. */
+export async function autosavePracticeAttempt(
+  attemptId: string,
+  userId: string,
+  snapshot: FinalizeAttemptSnapshot,
+): Promise<void> {
+  const durationSeconds = computeDurationSeconds(
+    snapshot.sessionMinutesPlanned,
+    snapshot.remainingSeconds,
+  )
+
+  const client = requireSupabase()
+  const { error } = await client
+    .from('practice_attempts')
+    .update({
+      code: snapshot.code,
+      language: snapshot.language,
+      duration_seconds: durationSeconds,
+      tests_passed: snapshot.testsPassed,
+      tests_total: snapshot.testsTotal,
+      all_tests_passed: snapshot.allTestsPassed,
+      hidden_passed: snapshot.hiddenPassed ?? null,
+      hidden_total: snapshot.hiddenTotal ?? null,
+      hints_used: snapshot.hintsUsed,
+      transcript: snapshot.transcript,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', attemptId)
+    .eq('user_id', userId)
+    .eq('status', 'in_progress')
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
 export async function startPracticeAttempt(
   userId: string,
   question: Question,

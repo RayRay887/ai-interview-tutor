@@ -30,6 +30,11 @@ interface UseInterviewSessionOptions {
   onMicLost?: () => void
   getSnapshot: () => PracticeSessionSnapshot
   onTestsJustRunConsumed?: () => void
+  /** When set, skip the spoken introduction and continue from saved transcript. */
+  resumeInterview?: {
+    transcript: InterviewerTranscriptEntry[]
+    hintLevel: HintLevel
+  } | null
 }
 
 function toTurnMessages(transcript: InterviewerTranscriptEntry[]) {
@@ -92,6 +97,7 @@ export function useInterviewSession({
   onMicLost,
   getSnapshot,
   onTestsJustRunConsumed,
+  resumeInterview = null,
 }: UseInterviewSessionOptions) {
   const [phase, setPhase] = useState<InterviewPhase>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -129,6 +135,8 @@ export function useInterviewSession({
   const resumePauseSecondsRef = useRef(0)
   const prevPausedRef = useRef(paused)
   const sessionEndedRef = useRef(false)
+  const resumeInterviewRef = useRef(resumeInterview)
+  resumeInterviewRef.current = resumeInterview
 
   useEffect(() => {
     pausedRef.current = paused
@@ -408,6 +416,31 @@ export function useInterviewSession({
 
   useEffect(() => {
     if (!enabled) return
+
+    const saved = resumeInterviewRef.current
+    if (saved) {
+      sessionEndedRef.current = false
+      processingRef.current = false
+      setError(null)
+      if (saved.transcript.length > 0) {
+        setTranscript(saved.transcript)
+        transcriptRef.current = saved.transcript
+        setHintLevel(saved.hintLevel)
+      }
+      setConversationStarted(true)
+      lastSessionPhaseRef.current =
+        saved.transcript.length > 0 ? 'implementation' : 'approach'
+      codeAtLastTurnRef.current = getSnapshotRef.current().code
+      sessionStartRef.current = Date.now()
+      lastCandidateSpeechRef.current = Date.now()
+      setPhase('listening')
+      return () => {
+        sessionRunIdRef.current += 1
+        ttsStopRef.current()
+        speechStopRef.current()
+        processingRef.current = false
+      }
+    }
 
     void startSession()
 

@@ -10,10 +10,12 @@ import {
   Pause,
   Play,
   Plus,
+  RotateCcw,
   Trash2,
   XCircle,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -38,14 +40,29 @@ import {
 } from '../../lib/questionDuration'
 import { usePracticeAttempt } from '../../context/PracticeAttemptContext'
 import {
+  autosavePracticeAttempt,
   finalizePracticeAttempt,
+  getPracticeAttempt,
   type FinalizeAttemptSnapshot,
+  type PracticeAttemptRow,
 } from '../../lib/practiceAttempts'
+import {
+  clearAttemptLocalState,
+  clearQuestionDraft,
+  markRestartRequested,
+  readAttemptLocalState,
+  readQuestionDraft,
+  writeAttemptLocalState,
+  writeQuestionDraft,
+  type QuestionPracticeDraft,
+} from '../../lib/practiceSessionStorage'
 import { CodeEditor } from './CodeEditor'
 import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
 import { InterviewerPanel } from './InterviewerPanel'
 import { useInterviewSession } from '../../hooks/useInterviewSession'
+import type { HintLevel, InterviewerTranscriptEntry } from '../../prompts/interviewer/types'
+
 import {
   buildLastFailures,
   type PracticeSessionSnapshot,
@@ -57,6 +74,8 @@ interface PracticeSessionProps {
   microphoneDeviceId: string
   sessionMinutes: number
   userTestMode: boolean
+  restoredAttempt?: PracticeAttemptRow | null
+  onRestart?: () => void
 }
 
 interface CustomTestCase {
@@ -69,6 +88,83 @@ type PauseReason = 'manual' | 'microphone' | 'time-up'
 
 function createIdleResults(count: number): TestResult[] {
   return Array.from({ length: count }, () => ({ status: 'idle' }))
+}
+
+function transcriptFromAttempt(
+  transcript: PracticeAttemptRow['transcript'],
+): InterviewerTranscriptEntry[] {
+  return transcript.map((entry, index) => ({
+    role: entry.role as InterviewerTranscriptEntry['role'],
+    text: entry.text,
+    timestamp: index * 1000,
+  }))
+}
+
+function buildInitialSessionState(
+  question: Question,
+  sessionMinutes: number,
+  attemptId: string,
+  userId: string,
+  restoredAttempt: PracticeAttemptRow | null | undefined,
+) {
+  const slugDraft = readQuestionDraft(userId, question.slug)
+  const local = readAttemptLocalState(attemptId)
+  const language = (slugDraft?.language ??
+    restoredAttempt?.language ??
+    'python') as CodeLanguage
+
+  const codeByLanguage: Partial<Record<CodeLanguage, string>> = {
+    python: question.starterCode,
+    ...(local?.codeByLanguage ?? {}),
+  }
+
+  if (restoredAttempt?.code) {
+    codeByLanguage[language] = restoredAttempt.code
+  }
+
+  if (slugDraft?.codeByLanguage) {
+    for (const [lang, source] of Object.entries(slugDraft.codeByLanguage)) {
+      if (typeof source === 'string' && source.trim()) {
+        codeByLanguage[lang as CodeLanguage] = source
+      }
+    }
+  }
+
+  const plannedSeconds = minutesToSeconds(sessionMinutes)
+  let remainingSeconds = plannedSeconds
+  if (slugDraft?.remainingSeconds != null && slugDraft.remainingSeconds > 0) {
+    remainingSeconds = Math.min(plannedSeconds, slugDraft.remainingSeconds)
+  } else if (restoredAttempt?.duration_seconds != null) {
+    remainingSeconds = Math.max(0, plannedSeconds - restoredAttempt.duration_seconds)
+  }
+
+  const customTestCases =
+    slugDraft?.customTestCases?.length ? slugDraft.customTestCases : (local?.customTestCases ?? [])
+
+  const resumeInterview = restoredAttempt
+    ? {
+        transcript:
+          restoredAttempt.transcript.length > 0
+            ? transcriptFromAttempt(restoredAttempt.transcript)
+            : [],
+        hintLevel: Math.min(4, restoredAttempt.hints_used) as HintLevel,
+      }
+    : null
+
+  return {
+    language,
+    codeByLanguage,
+    remainingSeconds,
+    customTestCases,
+    resumeInterview,
+  }
+}
+
+function persistQuestionDraft(
+  userId: string,
+  draft: Omit<QuestionPracticeDraft, 'updatedAt'>,
+) {
+  writeQuestionDraft(userId, { ...draft, updatedAt: Date.now() })
 }
 
 function TestFailureDetails({ result }: { result: TestResult }) {
@@ -110,17 +206,42 @@ export function PracticeSession({
   microphoneDeviceId,
   sessionMinutes,
   userTestMode,
+  restoredAttempt = null,
+  onRestart,
 }: PracticeSessionProps) {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { registerAbandonHandler, setLeaveProtectionEnabled } = usePracticeAttempt()
+  const { registerAbandonHandler, registerSaveHandler, setLeaveProtectionEnabled } =
+    usePracticeAttempt()
   const exitIntentRef = useRef<'active' | 'submitting' | 'completed' | 'abandoned'>('active')
-  const [language, setLanguage] = useState<CodeLanguage>('python')
-  const [codeByLanguage, setCodeByLanguage] = useState<Partial<Record<CodeLanguage, string>>>({
-    python: question.starterCode,
-  })
-  const [customTestCases, setCustomTestCases] = useState<CustomTestCase[]>([])
-  const [remainingSeconds, setRemainingSeconds] = useState(minutesToSeconds(sessionMinutes))
+
+  const [initialState] = useState(() =>
+    user
+      ? buildInitialSessionState(
+          question,
+          sessionMinutes,
+          attemptId,
+          user.id,
+          restoredAttempt,
+        )
+      : {
+          language: 'python' as CodeLanguage,
+          codeByLanguage: { python: question.starterCode },
+          remainingSeconds: minutesToSeconds(sessionMinutes),
+          customTestCases: [] as CustomTestCase[],
+          resumeInterview: null,
+        },
+  )
+  const resumeInterviewRef = useRef(initialState.resumeInterview)
+
+  const [language, setLanguage] = useState<CodeLanguage>(initialState.language)
+  const [codeByLanguage, setCodeByLanguage] = useState<
+    Partial<Record<CodeLanguage, string>>
+  >(initialState.codeByLanguage)
+  const [customTestCases, setCustomTestCases] = useState<CustomTestCase[]>(
+    initialState.customTestCases,
+  )
+  const [remainingSeconds, setRemainingSeconds] = useState(initialState.remainingSeconds)
   const [pauseReason, setPauseReason] = useState<PauseReason | null>(null)
   const [isRunningTests, setIsRunningTests] = useState(false)
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([])
@@ -132,7 +253,9 @@ export function PracticeSession({
     hiddenTestCount > 0 ? createIdleResults(hiddenTestCount) : [],
   )
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false)
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRestarting, setIsRestarting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const testsJustRunRef = useRef(false)
 
@@ -142,9 +265,55 @@ export function PracticeSession({
   }, [setLeaveProtectionEnabled])
 
   const isPaused = pauseReason !== null
-  const isTimerRunning = !isPaused && remainingSeconds > 0
+  const isDialogOpen = submitConfirmOpen || restartConfirmOpen
+  const isSessionHeld = isPaused || isDialogOpen || isSubmitting || isRestarting
+  const isTimerRunning = !isSessionHeld && remainingSeconds > 0
 
   const code = codeByLanguage[language] ?? getStarterCode(question, language)
+
+  const persistDraft = useCallback(
+    (
+      overrides: Partial<{
+        codeByLanguage: Partial<Record<CodeLanguage, string>>
+        language: CodeLanguage
+        remainingSeconds: number
+        customTestCases: CustomTestCase[]
+      }> = {},
+    ) => {
+      if (!user) return
+      const activeLanguage = overrides.language ?? language
+      const nextCodeByLanguage = overrides.codeByLanguage ?? {
+        ...codeByLanguage,
+        [activeLanguage]: overrides.codeByLanguage?.[activeLanguage] ?? code,
+      }
+      persistQuestionDraft(user.id, {
+        attemptId,
+        questionSlug: question.slug,
+        sessionMinutes,
+        userTestMode,
+        language: activeLanguage,
+        codeByLanguage: nextCodeByLanguage,
+        remainingSeconds: overrides.remainingSeconds ?? remainingSeconds,
+        customTestCases: overrides.customTestCases ?? customTestCases,
+      })
+    },
+    [
+      user,
+      attemptId,
+      question.slug,
+      sessionMinutes,
+      userTestMode,
+      language,
+      codeByLanguage,
+      code,
+      remainingSeconds,
+      customTestCases,
+    ],
+  )
+
+  const persistDraftRef = useRef(persistDraft)
+  persistDraftRef.current = persistDraft
+
   const fileName = `${question.slug}.${getLanguageExtension(language)}`
   const inputPlaceholder = question.examples[0]?.input ?? 'nums = [1, 2], target = 3'
   const outputPlaceholder = question.examples[0]?.output ?? '[0, 1]'
@@ -195,16 +364,25 @@ export function PracticeSession({
     setPauseReason((current) => (current === 'microphone' ? current : 'microphone'))
   }, [])
 
+  const silenceInterviewer = useCallback(() => {
+    stopAllInterviewAudio()
+  }, [])
+
   const interview = useInterviewSession({
     question,
     microphoneDeviceId,
-    enabled: Boolean(microphoneDeviceId) && pauseReason !== 'microphone' && !isSubmitting,
-    paused: isPaused,
+    enabled:
+      Boolean(microphoneDeviceId) &&
+      pauseReason !== 'microphone' &&
+      !isSubmitting &&
+      !isRestarting,
+    paused: isSessionHeld,
     onMicLost: handleMicLost,
     getSnapshot,
     onTestsJustRunConsumed: () => {
       testsJustRunRef.current = false
     },
+    resumeInterview: resumeInterviewRef.current,
   })
 
   const interviewRef = useRef(interview)
@@ -239,21 +417,19 @@ export function PracticeSession({
 
   const handleLanguageChange = (nextLanguage: CodeLanguage) => {
     if (isPaused) return
-    setCodeByLanguage((current) => ({
-      ...current,
-      [language]: code,
-    }))
+    const nextCodeByLanguage = { ...codeByLanguage, [language]: code }
+    setCodeByLanguage(nextCodeByLanguage)
     setLanguage(nextLanguage)
     setConsoleEntries([])
     resetTestResults()
+    persistDraft({ codeByLanguage: nextCodeByLanguage, language: nextLanguage })
   }
 
   const handleCodeChange = (value: string) => {
     if (isPaused) return
-    setCodeByLanguage((current) => ({
-      ...current,
-      [language]: value,
-    }))
+    const nextCodeByLanguage = { ...codeByLanguage, [language]: value }
+    setCodeByLanguage(nextCodeByLanguage)
+    persistDraft({ codeByLanguage: nextCodeByLanguage })
   }
 
   const handleAddCustomTestCase = () => {
@@ -405,6 +581,8 @@ export function PracticeSession({
 
     exitIntentRef.current = 'abandoned'
     interviewRef.current.endSession()
+    clearAttemptLocalState(attemptId)
+    if (user) clearQuestionDraft(user.id, question.slug)
     try {
       await finalizePracticeAttempt(
         attemptId,
@@ -416,12 +594,104 @@ export function PracticeSession({
       exitIntentRef.current = 'active'
       console.error('Failed to finalize abandoned session:', err)
     }
-  }, [attemptId, user])
+  }, [attemptId, user, question.slug])
+
+  const saveProgress = useCallback(async () => {
+    if (!user) return
+    interviewRef.current.endSession()
+    stopAllInterviewAudio()
+    persistDraft()
+    writeAttemptLocalState(attemptId, {
+      userTestMode,
+      customTestCases,
+      codeByLanguage: { ...codeByLanguage, [language]: code },
+    })
+    await autosavePracticeAttempt(
+      attemptId,
+      user.id,
+      buildFinalizeSnapshotRef.current(),
+    )
+  }, [
+    attemptId,
+    user,
+    userTestMode,
+    customTestCases,
+    codeByLanguage,
+    language,
+    code,
+    persistDraft,
+  ])
+
+  const saveProgressRef = useRef(saveProgress)
+  saveProgressRef.current = saveProgress
 
   useEffect(() => {
     registerAbandonHandler(finalizeAbandoned)
     return () => registerAbandonHandler(null)
   }, [registerAbandonHandler, finalizeAbandoned])
+
+  useEffect(() => {
+    registerSaveHandler(() => saveProgressRef.current())
+    return () => registerSaveHandler(null)
+  }, [registerSaveHandler])
+
+  useEffect(() => {
+    if (!user) return
+
+    persistDraftRef.current()
+
+    const timeout = window.setTimeout(() => {
+      void autosavePracticeAttempt(
+        attemptId,
+        user.id,
+        buildFinalizeSnapshotRef.current(),
+      ).catch((err) => {
+        console.error('Autosave failed:', err)
+      })
+    }, 2000)
+
+    return () => window.clearTimeout(timeout)
+  }, [
+    attemptId,
+    user,
+    code,
+    language,
+    codeByLanguage,
+    customTestCases,
+    userTestMode,
+    passedCount,
+    totalCount,
+    allPassed,
+    hiddenPassedCount,
+    hiddenTestResults.length,
+    interview.hintLevel,
+    interview.transcript,
+    remainingSeconds,
+  ])
+
+  useEffect(() => {
+    if (!user) return
+
+    const interval = window.setInterval(() => {
+      void autosavePracticeAttempt(
+        attemptId,
+        user.id,
+        buildFinalizeSnapshotRef.current(),
+      ).catch((err) => {
+        console.error('Periodic autosave failed:', err)
+      })
+    }, 30_000)
+
+    const handlePageHide = () => {
+      persistDraftRef.current()
+    }
+
+    window.addEventListener('pagehide', handlePageHide)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('pagehide', handlePageHide)
+    }
+  }, [attemptId, user, userTestMode, customTestCases])
 
   useEffect(() => {
     if (!isTimerRunning) return
@@ -438,10 +708,13 @@ export function PracticeSession({
   }, [isTimerRunning])
 
   useEffect(() => {
-    if (!submitConfirmOpen) return
+    if (!submitConfirmOpen && !restartConfirmOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSubmitConfirmOpen(false)
+      if (event.key === 'Escape') {
+        if (!isSubmitting) setSubmitConfirmOpen(false)
+        if (!isRestarting) setRestartConfirmOpen(false)
+      }
     }
 
     document.body.style.overflow = 'hidden'
@@ -451,19 +724,38 @@ export function PracticeSession({
       document.body.style.overflow = ''
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [submitConfirmOpen])
+  }, [submitConfirmOpen, restartConfirmOpen, isSubmitting, isRestarting])
 
   const handleSubmitFeedback = useCallback(async () => {
     if (!user || isSubmitting) return
-    if (exitIntentRef.current === 'completed' || exitIntentRef.current === 'submitting') return
+    if (exitIntentRef.current === 'completed') return
 
     exitIntentRef.current = 'submitting'
+    setLeaveProtectionEnabled(false)
     setIsSubmitting(true)
     setSubmitError(null)
-    stopAllInterviewAudio()
+    silenceInterviewer()
     interviewRef.current.endSession()
 
     try {
+      persistDraft()
+      writeAttemptLocalState(attemptId, {
+        userTestMode,
+        customTestCases,
+        codeByLanguage: { ...codeByLanguage, [language]: code },
+      })
+
+      await autosavePracticeAttempt(
+        attemptId,
+        user.id,
+        buildFinalizeSnapshotRef.current(),
+      )
+
+      const existing = await getPracticeAttempt(attemptId, user.id)
+      if (!existing) {
+        throw new Error('Session not found. Use Restart to begin a fresh attempt.')
+      }
+
       const row = await finalizePracticeAttempt(
         attemptId,
         user.id,
@@ -474,10 +766,17 @@ export function PracticeSession({
         throw new Error('Session could not be marked as submitted. Please try again.')
       }
       exitIntentRef.current = 'completed'
-      setLeaveProtectionEnabled(false)
-      navigate(`/feedback/attempt/${attemptId}`)
+      clearQuestionDraft(user.id, question.slug)
+      clearAttemptLocalState(attemptId)
+
+      flushSync(() => {
+        setLeaveProtectionEnabled(false)
+        setSubmitConfirmOpen(false)
+      })
+      navigate(`/feedback/attempt/${attemptId}`, { replace: true })
     } catch (err) {
       exitIntentRef.current = 'active'
+      setLeaveProtectionEnabled(true)
       const message =
         err instanceof Error ? err.message : 'Could not submit session. Please try again.'
       setSubmitError(message)
@@ -485,12 +784,85 @@ export function PracticeSession({
     } finally {
       setIsSubmitting(false)
     }
-  }, [user, isSubmitting, attemptId, navigate, setLeaveProtectionEnabled])
+  }, [
+    user,
+    isSubmitting,
+    attemptId,
+    question.slug,
+    navigate,
+    setLeaveProtectionEnabled,
+    persistDraft,
+    userTestMode,
+    customTestCases,
+    codeByLanguage,
+    language,
+    code,
+    silenceInterviewer,
+  ])
 
   const handleConfirmSubmit = () => {
-    setSubmitConfirmOpen(false)
     void handleSubmitFeedback()
   }
+
+  const openRestartConfirm = useCallback(() => {
+    if (isSubmitting || isRestarting) return
+    silenceInterviewer()
+    setRestartConfirmOpen(true)
+  }, [isSubmitting, isRestarting, silenceInterviewer])
+
+  const openSubmitConfirm = useCallback(() => {
+    if (isSubmitting || isRestarting) return
+    silenceInterviewer()
+    setSubmitError(null)
+    setSubmitConfirmOpen(true)
+  }, [isSubmitting, isRestarting, silenceInterviewer])
+
+  const handleRestartQuestion = useCallback(async () => {
+    if (!user || isRestarting || isSubmitting) return
+
+    setIsRestarting(true)
+    setLeaveProtectionEnabled(false)
+    silenceInterviewer()
+    interviewRef.current.endSession()
+    markRestartRequested(user.id, question.slug)
+
+    try {
+      if (exitIntentRef.current !== 'completed' && exitIntentRef.current !== 'submitting') {
+        exitIntentRef.current = 'abandoned'
+        await finalizePracticeAttempt(
+          attemptId,
+          user.id,
+          'abandoned',
+          buildFinalizeSnapshotRef.current(),
+        )
+      }
+      clearQuestionDraft(user.id, question.slug)
+      clearAttemptLocalState(attemptId)
+      setRestartConfirmOpen(false)
+      onRestart?.()
+    } catch (err) {
+      exitIntentRef.current = 'active'
+      console.error('Failed to restart session:', err)
+      setSubmitError(
+        err instanceof Error ? err.message : 'Could not restart. Please try again.',
+      )
+      setIsRestarting(false)
+    }
+  }, [
+    user,
+    isRestarting,
+    isSubmitting,
+    attemptId,
+    question.slug,
+    setLeaveProtectionEnabled,
+    silenceInterviewer,
+    onRestart,
+  ])
+
+  useEffect(() => {
+    if (!user) return
+    persistDraftRef.current()
+  }, [user])
 
   const renderTestStatus = (status: TestResult['status']) => {
     if (status === 'passed') {
@@ -514,7 +886,7 @@ export function PracticeSession({
 
   return (
     <div className="glass glow-blue relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/80 px-4 py-3">
+      <div className="relative z-30 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/80 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-text-primary">{question.title}</span>
           <span
@@ -565,6 +937,28 @@ export function PracticeSession({
               Pause
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={openRestartConfirm}
+            disabled={isSubmitting || isRestarting}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span className="hidden sm:inline">Restart</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openSubmitConfirm}
+            disabled={isSubmitting || isRestarting}
+            className="inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-blue/25 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            Submit
+          </button>
         </div>
       </div>
 
@@ -857,8 +1251,6 @@ export function PracticeSession({
             showPlayButton={interview.playBlocked}
             onRetry={() => void interview.retryStart()}
             onPlayIntroduction={() => void interview.playIntroduction()}
-            onSubmit={() => setSubmitConfirmOpen(true)}
-            submitDisabled={isSubmitting}
           />
         </div>
 
@@ -899,6 +1291,56 @@ export function PracticeSession({
           {submitError}
         </div>
       )}
+
+      <AnimatePresence>
+        {restartConfirmOpen && (
+          <motion.div
+            className="fixed inset-0 z-[65] flex items-center justify-center bg-bg-primary/80 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => !isRestarting && setRestartConfirmOpen(false)}
+          >
+            <motion.div
+              className="glass glow-blue w-full max-w-sm rounded-2xl border border-white/10 p-6 shadow-2xl"
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="restart-confirm-title"
+            >
+              <h2 id="restart-confirm-title" className="text-lg font-semibold text-text-primary">
+                Restart question?
+              </h2>
+              <p className="mt-2 text-sm text-text-secondary">
+                This clears your current code, interview progress, and timer for this question. You
+                will start from session setup again. This cannot be undone.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRestartConfirmOpen(false)}
+                  disabled={isRestarting}
+                  className="flex-1 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRestartQuestion()}
+                  disabled={isRestarting}
+                  className="flex-1 rounded-lg border border-amber-500/30 bg-amber-500/15 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRestarting ? 'Restarting…' : 'Restart'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {(submitConfirmOpen || isSubmitting) && (

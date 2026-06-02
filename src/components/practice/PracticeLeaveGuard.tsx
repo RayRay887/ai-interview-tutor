@@ -2,13 +2,21 @@ import { useEffect } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { usePracticeAttempt } from '../../context/PracticeAttemptContext'
 
-export function PracticeLeaveGuard() {
-  const { leaveProtectionEnabled, openLeaveConfirmFromBlocker } = usePracticeAttempt()
+function isFeedbackNavigation(pathname: string) {
+  return pathname.startsWith('/feedback/')
+}
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      leaveProtectionEnabled && currentLocation.pathname !== nextLocation.pathname,
-  )
+export function PracticeLeaveGuard() {
+  const { leaveProtectionEnabled, isLeaveProtectionActive, openLeaveConfirmFromBlocker } =
+    usePracticeAttempt()
+
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (isFeedbackNavigation(nextLocation.pathname)) return false
+    return (
+      isLeaveProtectionActive() &&
+      currentLocation.pathname !== nextLocation.pathname
+    )
+  })
 
   useEffect(() => {
     if (blocker.state !== 'blocked' || !leaveProtectionEnabled) return
