@@ -43,6 +43,7 @@ import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
 import { InterviewerPanel } from './InterviewerPanel'
 import { useInterviewSession } from '../../hooks/useInterviewSession'
+import { stopAllInterviewAudio } from '../../hooks/useInterviewerTTS'
 import {
   buildLastFailures,
   type PracticeSessionSnapshot,
@@ -126,6 +127,7 @@ export function PracticeSession({
     hiddenTestCount > 0 ? createIdleResults(hiddenTestCount) : [],
   )
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false)
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const testsJustRunRef = useRef(false)
 
   const isPaused = pauseReason !== null
@@ -185,6 +187,7 @@ export function PracticeSession({
   const interview = useInterviewSession({
     question,
     microphoneDeviceId,
+    enabled: Boolean(microphoneDeviceId) && pauseReason !== 'microphone' && !isSubmittingFeedback,
     paused: isPaused,
     onMicLost: handleMicLost,
     getSnapshot,
@@ -392,8 +395,10 @@ export function PracticeSession({
   }, [submitConfirmOpen])
 
   const handleSubmitFeedback = useCallback(() => {
-    if (!user || isPaused) return
+    if (!user || isPaused || isSubmittingFeedback) return
 
+    setIsSubmittingFeedback(true)
+    stopAllInterviewAudio()
     interview.endSession()
 
     const questionContext = toInterviewQuestionContext(question)
@@ -403,6 +408,7 @@ export function PracticeSession({
     )
 
     const state: FeedbackNavigationState = {
+      feedbackRequestId: crypto.randomUUID(),
       request: {
         question: questionContext,
         code: { source: code, language },
@@ -433,6 +439,7 @@ export function PracticeSession({
   }, [
     user,
     isPaused,
+    isSubmittingFeedback,
     interview,
     question,
     totalCount,
@@ -475,7 +482,7 @@ export function PracticeSession({
         : 'Session paused. Resume when you are ready to continue.'
 
   return (
-    <div className="glass glow-blue relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+    <div className="glass glow-blue relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 shadow-2xl sm:rounded-2xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/80 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-text-primary">{question.title}</span>
@@ -532,7 +539,7 @@ export function PracticeSession({
 
       <div className="relative min-h-0 flex-1">
         <div
-          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,24%)_minmax(0,1fr)_minmax(280px,380px)] ${
+          className={`grid h-full min-h-0 lg:grid-cols-[minmax(200px,18%)_minmax(0,1fr)_minmax(220px,240px)] xl:grid-cols-[minmax(220px,16%)_minmax(0,1fr)_minmax(240px,260px)] 2xl:grid-cols-[minmax(240px,15%)_minmax(0,1fr)_minmax(260px,280px)] ${
             isPaused ? 'pointer-events-none select-none' : ''
           }`}
           aria-hidden={isPaused}
@@ -595,8 +602,8 @@ export function PracticeSession({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col bg-bg-secondary/20">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/40 px-4 py-3">
+          <div className="flex min-h-0 flex-col bg-bg-secondary/20 lg:min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/40 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <Code2 className="h-4 w-4 text-accent-blue" />
                 <span className="font-mono text-xs text-text-primary">{fileName}</span>
@@ -623,7 +630,7 @@ export function PracticeSession({
               </div>
             </div>
 
-            <div className="relative min-h-0 flex-1 overflow-hidden">
+            <div className="relative min-h-[min(52vh,560px)] flex-1 overflow-hidden">
               <CodeEditor
                 value={code}
                 language={language}
@@ -636,6 +643,7 @@ export function PracticeSession({
 
             <CollapsibleSection
               title="Test Cases"
+              defaultOpen={false}
               badge={
                 hasRunTests && !isRunningTests ? (
                   <span
@@ -665,7 +673,7 @@ export function PracticeSession({
                   {isRunningTests ? 'Running...' : 'Run tests'}
                 </button>
               }
-              contentClassName="theme-scrollbar h-40 overflow-y-auto p-4 pt-0"
+              contentClassName="theme-scrollbar max-h-48 overflow-y-auto p-4 pt-0"
             >
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">

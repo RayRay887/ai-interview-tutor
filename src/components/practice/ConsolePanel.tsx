@@ -22,8 +22,8 @@ export function ConsolePanel({ entries }: ConsolePanelProps) {
   return (
     <CollapsibleSection
       title="Console"
-      defaultOpen={false}
       icon={<Terminal className="h-3.5 w-3.5 text-accent-blue" />}
+      defaultOpen={false}
       badge={
         errorCount > 0 ? (
           <span className="rounded bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-400 normal-case">
@@ -37,7 +37,7 @@ export function ConsolePanel({ entries }: ConsolePanelProps) {
       }
       contentClassName="border-t border-white/10 bg-bg-primary/90"
     >
-      <div className="theme-scrollbar max-h-36 min-h-28 overflow-y-auto px-4 py-3">
+      <div className="theme-scrollbar max-h-28 min-h-20 overflow-y-auto px-4 py-3">
         {entries.length === 0 ? (
           <p className="font-mono text-xs text-text-secondary/70">
             Run tests to see compile errors, runtime issues, and results here.

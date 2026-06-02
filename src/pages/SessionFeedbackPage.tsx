@@ -6,7 +6,7 @@ import {
   MessageSquare,
   TrendingUp,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import {
   FeedbackSectionCard,
@@ -17,7 +17,11 @@ import { Button } from '../components/ui/Button'
 import { GradientText } from '../components/ui/GradientText'
 import { useAuth } from '../context/AuthContext'
 import { getQuestionBySlug } from '../data/questions'
-import { requestInterviewFeedback } from '../lib/feedbackApi'
+import {
+  clearFeedbackRequestCache,
+  getCachedFeedbackResult,
+  requestInterviewFeedbackOnce,
+} from '../lib/feedbackApi'
 import { getLatestFeedbackForQuestion, saveFeedbackHistory } from '../lib/feedbackHistory'
 import { scrollToTop } from '../lib/scrollToTop'
 import {
@@ -27,7 +31,6 @@ import {
 import type {
   FeedbackNavigationState,
   FeedbackViewState,
-  InterviewFeedbackRequest,
   InterviewFeedbackResult,
 } from '../types/feedback'
 
@@ -45,10 +48,16 @@ export function SessionFeedbackPage() {
   const { user } = useAuth()
 
   const navState = location.state as FeedbackNavigationState | FeedbackViewState | null
+  const feedbackRequestId =
+    navState && 'feedbackRequestId' in navState ? navState.feedbackRequestId : undefined
+  const pendingRequest =
+    navState && 'request' in navState ? navState.request : undefined
 
-  const [feedback, setFeedback] = useState<InterviewFeedbackResult | null>(
-    navState && 'feedback' in navState ? navState.feedback : null,
-  )
+  const [feedback, setFeedback] = useState<InterviewFeedbackResult | null>(() => {
+    if (navState && 'feedback' in navState) return navState.feedback
+    if (feedbackRequestId) return getCachedFeedbackResult(feedbackRequestId) ?? null
+    return null
+  })
   const [questionMeta, setQuestionMeta] = useState(
     navState?.question ??
       (slug && getQuestionBySlug(slug)
@@ -63,38 +72,43 @@ export function SessionFeedbackPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const pendingRequest =
-    navState && 'request' in navState ? navState.request : undefined
-
-  const fetchFeedback = useCallback(
-    async (request: InterviewFeedbackRequest) => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const result = await requestInterviewFeedback(request)
-        setFeedback(result)
-        if (user && questionMeta) {
-          saveFeedbackHistory(user.id, questionMeta, result)
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not generate interview feedback.')
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [user, questionMeta],
-  )
-
   useEffect(() => {
     scrollToTop()
   }, [])
 
   useEffect(() => {
-    if (feedback || isLoading) return
+    if (feedback) return
 
-    if (pendingRequest) {
-      void fetchFeedback(pendingRequest)
-      return
+    if (pendingRequest && feedbackRequestId) {
+      const cached = getCachedFeedbackResult(feedbackRequestId)
+      if (cached) {
+        setFeedback(cached)
+        return
+      }
+
+      let cancelled = false
+      setIsLoading(true)
+      setError(null)
+
+      void requestInterviewFeedbackOnce(feedbackRequestId, pendingRequest)
+        .then((result) => {
+          if (cancelled) return
+          setFeedback(result)
+          if (user && questionMeta) {
+            saveFeedbackHistory(user.id, questionMeta, result)
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return
+          setError(err instanceof Error ? err.message : 'Could not generate interview feedback.')
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoading(false)
+        })
+
+      return () => {
+        cancelled = true
+      }
     }
 
     if (user && slug) {
@@ -111,10 +125,10 @@ export function SessionFeedbackPage() {
       }
     }
 
-    if (!pendingRequest && !feedback) {
+    if (!pendingRequest) {
       setError('No feedback data for this session. Submit from a practice session to generate a report.')
     }
-  }, [feedback, isLoading, pendingRequest, user, slug, fetchFeedback])
+  }, [feedback, pendingRequest, feedbackRequestId, user, slug, questionMeta])
 
   if (!slug || !questionMeta) {
     return (
@@ -130,6 +144,27 @@ export function SessionFeedbackPage() {
   }
 
   const styles = feedback ? recommendationStyles[feedback.recommendation] : null
+
+  const handleRetry = () => {
+    if (!pendingRequest || !feedbackRequestId) return
+    clearFeedbackRequestCache(feedbackRequestId)
+    setFeedback(null)
+    setError(null)
+    setIsLoading(true)
+    void requestInterviewFeedbackOnce(feedbackRequestId, pendingRequest)
+      .then((result) => {
+        setFeedback(result)
+        if (user && questionMeta) {
+          saveFeedbackHistory(user.id, questionMeta, result)
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Could not generate interview feedback.')
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+  }
 
   return (
     <main className="relative pt-28 pb-20 sm:pt-32">
@@ -156,7 +191,7 @@ export function SessionFeedbackPage() {
             <Loader2 className="h-10 w-10 animate-spin text-accent-blue" />
             <p className="mt-4 text-sm font-medium text-text-primary">Analyzing your session…</p>
             <p className="mt-2 max-w-sm text-xs text-text-secondary">
-              Grading code, verbal interview, and complexity across FAANG-style rubrics.
+              Grading against Tech Interview Handbook and Golden Rubric dimensions.
             </p>
           </div>
         )}
@@ -166,10 +201,10 @@ export function SessionFeedbackPage() {
             <AlertCircle className="mx-auto h-8 w-8 text-rose-400" />
             <p className="mt-3 text-sm text-rose-200">{error}</p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
-              {pendingRequest && (
+              {pendingRequest && feedbackRequestId && (
                 <button
                   type="button"
-                  onClick={() => void fetchFeedback(pendingRequest)}
+                  onClick={handleRetry}
                   className="text-sm font-medium text-accent-blue hover:underline"
                 >
                   Try again
@@ -208,7 +243,7 @@ export function SessionFeedbackPage() {
 
             <FeedbackSectionCard
               title="Code rubric"
-              subtitle="Submitted solution — correctness, testing, and edge cases"
+              subtitle="Technical competency, coding & syntax, testing — Tech Interview Handbook + Golden Rubric"
               icon={<Code2 className="h-5 w-5" />}
               section={feedback.code}
               accentClass="text-accent-blue"
@@ -216,7 +251,7 @@ export function SessionFeedbackPage() {
 
             <FeedbackSectionCard
               title="Verbal interview"
-              subtitle="Spoken explanation — approach, logic clarity, and communication"
+              subtitle="Communication, problem solving, ambiguity, feedback — how you explained your approach"
               icon={<MessageSquare className="h-5 w-5" />}
               section={feedback.interview}
               accentClass="text-accent-purple"
@@ -224,7 +259,7 @@ export function SessionFeedbackPage() {
 
             <FeedbackSectionCard
               title="Complexity & optimization"
-              subtitle="Time/space analysis and whether the solution is optimal"
+              subtitle="Data structures, algorithms, Big-O, and runtime vs space tradeoffs"
               icon={<TrendingUp className="h-5 w-5" />}
               section={feedback.optimization}
               accentClass="text-emerald-400"

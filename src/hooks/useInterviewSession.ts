@@ -19,7 +19,7 @@ import type {
   InterviewerTranscriptEntry,
 } from '../prompts/interviewer/types'
 import { toInterviewQuestionContext, type InterviewPhase } from '../types/interview'
-import { useInterviewerTTS } from './useInterviewerTTS'
+import { useInterviewerTTS, stopAllInterviewAudio } from './useInterviewerTTS'
 import { useWhisperCapture } from './useWhisperCapture'
 
 interface UseInterviewSessionOptions {
@@ -230,6 +230,8 @@ export function useInterviewSession({
       role: 'interviewer' | 'hint',
       approachClarity?: ReturnType<typeof assessApproachClarity>,
     ) => {
+      if (sessionEndedRef.current) return
+
       appendTranscript(role, reply)
       if (role === 'hint') {
         setHintLevel((current) => Math.min(4, current + 1) as HintLevel)
@@ -241,17 +243,17 @@ export function useInterviewSession({
         approachProbeCountRef.current += 1
       }
 
-      if (pausedRef.current) return
+      if (pausedRef.current || sessionEndedRef.current) return
 
       setPhase('speaking')
       const ttsStart = performance.now()
       const blob = await prefetchSpeech(reply)
       const ttsMs = Math.round(performance.now() - ttsStart)
-      if (pausedRef.current) return
+      if (pausedRef.current || sessionEndedRef.current) return
       await playSpeechBlob(blob)
-      if (pausedRef.current) return
+      if (pausedRef.current || sessionEndedRef.current) return
       await speechResumeRef.current?.()
-      if (pausedRef.current) return
+      if (pausedRef.current || sessionEndedRef.current) return
       setPhase('listening')
 
       if (import.meta.env.DEV) {
@@ -264,7 +266,7 @@ export function useInterviewSession({
   const handleCandidateMessage = useCallback(
     async (rawText: string) => {
       const text = rawText.trim()
-      if (!text || processingRef.current || pausedRef.current) return
+      if (!text || processingRef.current || pausedRef.current || sessionEndedRef.current) return
 
       processingRef.current = true
       lastCandidateSpeechRef.current = Date.now()
@@ -280,7 +282,7 @@ export function useInterviewSession({
         const llmStart = performance.now()
         const turn = await requestInterviewTurn(buildTurnRequest(text, transcriptForTurn))
         const llmMs = Math.round(performance.now() - llmStart)
-        if (pausedRef.current) return
+        if (pausedRef.current || sessionEndedRef.current) return
         await deliverReply(turn.reply, turn.role, approachClarity)
 
         if (import.meta.env.DEV) {
@@ -292,6 +294,7 @@ export function useInterviewSession({
           })
         }
       } catch (err) {
+        if (sessionEndedRef.current) return
         const message =
           err instanceof Error ? err.message : 'Could not reach the interviewer.'
         setError(message)
@@ -365,16 +368,16 @@ export function useInterviewSession({
       const opening = openingTurn.reply
       pendingOpeningRef.current = opening
 
-      if (runId !== sessionRunIdRef.current || pausedRef.current) return
+      if (runId !== sessionRunIdRef.current || pausedRef.current || sessionEndedRef.current) return
 
       setPhase('speaking')
       await speak(opening)
-      if (runId !== sessionRunIdRef.current || pausedRef.current) return
+      if (runId !== sessionRunIdRef.current || pausedRef.current || sessionEndedRef.current) return
 
       appendTranscript('interviewer', opening)
       pendingOpeningRef.current = null
       await speechResumeRef.current?.()
-      if (runId !== sessionRunIdRef.current || pausedRef.current) return
+      if (runId !== sessionRunIdRef.current || pausedRef.current || sessionEndedRef.current) return
 
       setConversationStarted(true)
       lastSessionPhaseRef.current = 'approach'
@@ -470,19 +473,20 @@ export function useInterviewSession({
   }, [startSession])
 
   const playIntroduction = useCallback(async () => {
-    if (pausedRef.current) return
+    if (pausedRef.current || sessionEndedRef.current) return
 
     setError(null)
     setPhase('speaking')
     try {
       await playPending()
-      if (pausedRef.current) return
+      if (pausedRef.current || sessionEndedRef.current) return
       await speechResumeRef.current?.()
-      if (pausedRef.current) return
+      if (pausedRef.current || sessionEndedRef.current) return
       setConversationStarted(true)
       lastSessionPhaseRef.current = 'approach'
       setPhase('listening')
     } catch (err) {
+      if (sessionEndedRef.current) return
       setError(err instanceof Error ? err.message : 'Could not play audio.')
       setPhase('error')
     }
@@ -491,9 +495,11 @@ export function useInterviewSession({
   const endSession = useCallback(() => {
     sessionEndedRef.current = true
     sessionRunIdRef.current += 1
+    stopAllInterviewAudio()
     ttsStopRef.current()
     speechStopRef.current()
     processingRef.current = false
+    pendingOpeningRef.current = null
     setPhase('complete')
   }, [])
 
