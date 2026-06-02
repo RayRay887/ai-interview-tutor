@@ -24,6 +24,7 @@ import {
 } from '../../data/languages'
 import type { Question } from '../../data/questions'
 import { isMicrophoneAvailable, useMicrophoneMonitor } from '../../hooks/useMicrophoneMonitor'
+import { stopAllInterviewAudio } from '../../hooks/useInterviewerTTS'
 import {
   runHiddenQuestionTests,
   runQuestionTests,
@@ -35,21 +36,23 @@ import {
   formatCountdown,
   minutesToSeconds,
 } from '../../lib/questionDuration'
-import { recordQuestionCompleted, recordQuestionOpened } from '../../lib/practiceHistory'
-import { toInterviewQuestionContext } from '../../types/interview'
-import type { FeedbackNavigationState } from '../../types/feedback'
+import { usePracticeAttempt } from '../../context/PracticeAttemptContext'
+import {
+  finalizePracticeAttempt,
+  type FinalizeAttemptSnapshot,
+} from '../../lib/practiceAttempts'
 import { CodeEditor } from './CodeEditor'
 import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
 import { InterviewerPanel } from './InterviewerPanel'
 import { useInterviewSession } from '../../hooks/useInterviewSession'
-import { stopAllInterviewAudio } from '../../hooks/useInterviewerTTS'
 import {
   buildLastFailures,
   type PracticeSessionSnapshot,
 } from '../../prompts/interviewer/sessionSnapshot'
 
 interface PracticeSessionProps {
+  attemptId: string
   question: Question
   microphoneDeviceId: string
   sessionMinutes: number
@@ -102,6 +105,7 @@ function TestFailureDetails({ result }: { result: TestResult }) {
 }
 
 export function PracticeSession({
+  attemptId,
   question,
   microphoneDeviceId,
   sessionMinutes,
@@ -109,7 +113,8 @@ export function PracticeSession({
 }: PracticeSessionProps) {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const completedRecordedRef = useRef(false)
+  const { registerAbandonHandler } = usePracticeAttempt()
+  const exitIntentRef = useRef<'active' | 'submitting' | 'completed' | 'abandoned'>('active')
   const [language, setLanguage] = useState<CodeLanguage>('python')
   const [codeByLanguage, setCodeByLanguage] = useState<Partial<Record<CodeLanguage, string>>>({
     python: question.starterCode,
@@ -127,7 +132,8 @@ export function PracticeSession({
     hiddenTestCount > 0 ? createIdleResults(hiddenTestCount) : [],
   )
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false)
-  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const testsJustRunRef = useRef(false)
 
   const isPaused = pauseReason !== null
@@ -187,7 +193,7 @@ export function PracticeSession({
   const interview = useInterviewSession({
     question,
     microphoneDeviceId,
-    enabled: Boolean(microphoneDeviceId) && pauseReason !== 'microphone' && !isSubmittingFeedback,
+    enabled: Boolean(microphoneDeviceId) && pauseReason !== 'microphone' && !isSubmitting,
     paused: isPaused,
     onMicLost: handleMicLost,
     getSnapshot,
@@ -195,6 +201,9 @@ export function PracticeSession({
       testsJustRunRef.current = false
     },
   })
+
+  const interviewRef = useRef(interview)
+  interviewRef.current = interview
 
   useMicrophoneMonitor({
     deviceId: microphoneDeviceId,
@@ -353,16 +362,61 @@ export function PracticeSession({
     (hasRunHiddenTests && hiddenTestResults.every((result) => result.status === 'passed'))
   const allPassed = allVisiblePassed && allHiddenPassed
 
-  useEffect(() => {
+  const buildFinalizeSnapshot = useCallback((): FinalizeAttemptSnapshot => {
+    return {
+      code,
+      language,
+      testsPassed: passedCount,
+      testsTotal: totalCount,
+      allTestsPassed: allPassed,
+      hiddenPassed: hiddenTestResults.length > 0 ? hiddenPassedCount : undefined,
+      hiddenTotal: hiddenTestResults.length > 0 ? hiddenTestResults.length : undefined,
+      hintsUsed: interview.hintLevel,
+      transcript: interview.transcript.map(({ role, text }) => ({ role, text })),
+      remainingSeconds,
+      sessionMinutesPlanned: sessionMinutes,
+    }
+  }, [
+    code,
+    language,
+    passedCount,
+    totalCount,
+    allPassed,
+    hiddenTestResults.length,
+    hiddenPassedCount,
+    interview.hintLevel,
+    interview.transcript,
+    remainingSeconds,
+    sessionMinutes,
+  ])
+
+  const buildFinalizeSnapshotRef = useRef(buildFinalizeSnapshot)
+  buildFinalizeSnapshotRef.current = buildFinalizeSnapshot
+
+  const finalizeAbandoned = useCallback(async () => {
     if (!user) return
-    recordQuestionOpened(user.id, question)
-  }, [user, question])
+    if (exitIntentRef.current === 'submitting' || exitIntentRef.current === 'completed') return
+    if (exitIntentRef.current === 'abandoned') return
+
+    exitIntentRef.current = 'abandoned'
+    interviewRef.current.endSession()
+    try {
+      await finalizePracticeAttempt(
+        attemptId,
+        user.id,
+        'abandoned',
+        buildFinalizeSnapshotRef.current(),
+      )
+    } catch (err) {
+      exitIntentRef.current = 'active'
+      console.error('Failed to finalize abandoned session:', err)
+    }
+  }, [attemptId, user])
 
   useEffect(() => {
-    if (!user || !allPassed || completedRecordedRef.current) return
-    completedRecordedRef.current = true
-    recordQuestionCompleted(user.id, question)
-  }, [user, question, allPassed])
+    registerAbandonHandler(finalizeAbandoned)
+    return () => registerAbandonHandler(null)
+  }, [registerAbandonHandler, finalizeAbandoned])
 
   useEffect(() => {
     if (!isTimerRunning) return
@@ -394,71 +448,42 @@ export function PracticeSession({
     }
   }, [submitConfirmOpen])
 
-  const handleSubmitFeedback = useCallback(() => {
-    if (!user || isPaused || isSubmittingFeedback) return
+  const handleSubmitFeedback = useCallback(async () => {
+    if (!user || isSubmitting) return
+    if (exitIntentRef.current === 'completed' || exitIntentRef.current === 'submitting') return
 
-    setIsSubmittingFeedback(true)
+    exitIntentRef.current = 'submitting'
+    setIsSubmitting(true)
+    setSubmitError(null)
     stopAllInterviewAudio()
-    interview.endSession()
+    interviewRef.current.endSession()
 
-    const questionContext = toInterviewQuestionContext(question)
-    const minutesUsed = Math.max(
-      0,
-      Math.round((minutesToSeconds(sessionMinutes) - remainingSeconds) / 60),
-    )
-
-    const state: FeedbackNavigationState = {
-      feedbackRequestId: crypto.randomUUID(),
-      request: {
-        question: questionContext,
-        code: { source: code, language },
-        tests: {
-          passed: passedCount,
-          total: totalCount,
-          allPassed,
-          hiddenPassed: hiddenTestResults.length > 0 ? hiddenPassedCount : undefined,
-          hiddenTotal: hiddenTestResults.length > 0 ? hiddenTestResults.length : undefined,
-          lastFailures: buildLastFailures(testResults, visibleTestCases),
-        },
-        transcript: interview.transcript.map(({ role, text }) => ({ role, text })),
-        session: {
-          minutesTotal: sessionMinutes,
-          minutesUsed,
-          hintsUsed: interview.hintLevel,
-        },
-      },
-      question: {
-        slug: question.slug,
-        title: question.title,
-        difficulty: question.difficulty,
-        category: question.category,
-      },
+    try {
+      const row = await finalizePracticeAttempt(
+        attemptId,
+        user.id,
+        'completed',
+        buildFinalizeSnapshotRef.current(),
+      )
+      if (row.status !== 'completed') {
+        throw new Error('Session could not be marked as submitted. Please try again.')
+      }
+      exitIntentRef.current = 'completed'
+      navigate(`/feedback/attempt/${attemptId}`)
+    } catch (err) {
+      exitIntentRef.current = 'active'
+      const message =
+        err instanceof Error ? err.message : 'Could not submit session. Please try again.'
+      setSubmitError(message)
+      console.error('Failed to submit session:', err)
+    } finally {
+      setIsSubmitting(false)
     }
-
-    navigate(`/feedback/${question.slug}`, { state })
-  }, [
-    user,
-    isPaused,
-    isSubmittingFeedback,
-    interview,
-    question,
-    totalCount,
-    passedCount,
-    hiddenTestResults.length,
-    hiddenPassedCount,
-    sessionMinutes,
-    remainingSeconds,
-    code,
-    language,
-    allPassed,
-    testResults,
-    visibleTestCases,
-    navigate,
-  ])
+  }, [user, isSubmitting, attemptId, navigate])
 
   const handleConfirmSubmit = () => {
     setSubmitConfirmOpen(false)
-    handleSubmitFeedback()
+    void handleSubmitFeedback()
   }
 
   const renderTestStatus = (status: TestResult['status']) => {
@@ -482,7 +507,7 @@ export function PracticeSession({
         : 'Session paused. Resume when you are ready to continue.'
 
   return (
-    <div className="glass glow-blue relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 shadow-2xl sm:rounded-2xl">
+    <div className="glass glow-blue relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/80 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-text-primary">{question.title}</span>
@@ -539,7 +564,7 @@ export function PracticeSession({
 
       <div className="relative min-h-0 flex-1">
         <div
-          className={`grid h-full min-h-0 lg:grid-cols-[minmax(200px,18%)_minmax(0,1fr)_minmax(220px,240px)] xl:grid-cols-[minmax(220px,16%)_minmax(0,1fr)_minmax(240px,260px)] 2xl:grid-cols-[minmax(240px,15%)_minmax(0,1fr)_minmax(260px,280px)] ${
+          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,24%)_minmax(0,1fr)_minmax(280px,380px)] ${
             isPaused ? 'pointer-events-none select-none' : ''
           }`}
           aria-hidden={isPaused}
@@ -602,8 +627,8 @@ export function PracticeSession({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col bg-bg-secondary/20 lg:min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/40 px-4 py-2.5">
+          <div className="flex min-h-0 flex-col bg-bg-secondary/20">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-bg-secondary/40 px-4 py-3">
               <div className="flex items-center gap-2">
                 <Code2 className="h-4 w-4 text-accent-blue" />
                 <span className="font-mono text-xs text-text-primary">{fileName}</span>
@@ -630,7 +655,7 @@ export function PracticeSession({
               </div>
             </div>
 
-            <div className="relative min-h-[min(52vh,560px)] flex-1 overflow-hidden">
+            <div className="relative min-h-0 flex-1 overflow-hidden">
               <CodeEditor
                 value={code}
                 language={language}
@@ -643,7 +668,6 @@ export function PracticeSession({
 
             <CollapsibleSection
               title="Test Cases"
-              defaultOpen={false}
               badge={
                 hasRunTests && !isRunningTests ? (
                   <span
@@ -673,7 +697,7 @@ export function PracticeSession({
                   {isRunningTests ? 'Running...' : 'Run tests'}
                 </button>
               }
-              contentClassName="theme-scrollbar max-h-48 overflow-y-auto p-4 pt-0"
+              contentClassName="theme-scrollbar h-40 overflow-y-auto p-4 pt-0"
             >
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -828,7 +852,7 @@ export function PracticeSession({
             onRetry={() => void interview.retryStart()}
             onPlayIntroduction={() => void interview.playIntroduction()}
             onSubmit={() => setSubmitConfirmOpen(true)}
-            submitDisabled={isPaused}
+            submitDisabled={isSubmitting}
           />
         </div>
 
@@ -864,14 +888,20 @@ export function PracticeSession({
         )}
       </div>
 
+      {submitError && !submitConfirmOpen && (
+        <div className="fixed bottom-4 left-1/2 z-[60] max-w-md -translate-x-1/2 rounded-lg border border-rose-500/30 bg-bg-secondary px-4 py-3 text-center text-sm text-rose-300 shadow-lg">
+          {submitError}
+        </div>
+      )}
+
       <AnimatePresence>
-        {submitConfirmOpen && (
+        {(submitConfirmOpen || isSubmitting) && (
           <motion.div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-bg-primary/80 p-4 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setSubmitConfirmOpen(false)}
+            onClick={() => !isSubmitting && setSubmitConfirmOpen(false)}
           >
             <motion.div
               className="glass glow-blue w-full max-w-sm rounded-2xl border border-white/10 p-6 shadow-2xl"
@@ -884,29 +914,50 @@ export function PracticeSession({
               aria-modal="true"
               aria-labelledby="submit-confirm-title"
             >
-              <h2 id="submit-confirm-title" className="text-lg font-semibold text-text-primary">
-                Submit session?
-              </h2>
-              <p className="mt-2 text-sm text-text-secondary">
-                Are you sure you want to submit? This will end your interview and generate feedback.
-                This action cannot be reversed.
-              </p>
-              <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSubmitConfirmOpen(false)}
-                  className="flex-1 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-white/5"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmSubmit}
-                  className="flex-1 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  Submit
-                </button>
-              </div>
+              {isSubmitting ? (
+                <>
+                  <div className="flex justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-accent-blue" />
+                  </div>
+                  <h2 id="submit-confirm-title" className="mt-4 text-lg font-semibold text-text-primary">
+                    Submitting session…
+                  </h2>
+                  <p className="mt-2 text-sm text-text-secondary">
+                    Saving your work and preparing feedback.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 id="submit-confirm-title" className="text-lg font-semibold text-text-primary">
+                    Submit session?
+                  </h2>
+                  <p className="mt-2 text-sm text-text-secondary">
+                    Are you sure you want to submit? This will end your interview and generate feedback.
+                    This action cannot be reversed.
+                  </p>
+                  {submitError && (
+                    <p className="mt-3 text-sm text-rose-300" role="alert">
+                      {submitError}
+                    </p>
+                  )}
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSubmitConfirmOpen(false)}
+                      className="flex-1 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-white/5"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmSubmit}
+                      className="flex-1 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                    >
+                      Submit
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
