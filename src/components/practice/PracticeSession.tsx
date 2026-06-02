@@ -532,7 +532,7 @@ export function PracticeSession({
 
       <div className="relative min-h-0 flex-1">
         <div
-          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,26%)_minmax(0,1fr)_minmax(260px,300px)] ${
+          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,24%)_minmax(0,1fr)_minmax(280px,380px)] ${
             isPaused ? 'pointer-events-none select-none' : ''
           }`}
           aria-hidden={isPaused}
