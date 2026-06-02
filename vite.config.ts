@@ -176,6 +176,8 @@ Approach feedback (use approachClarity in context):
 - concrete: light acknowledgment + forward motion (complexity question OR invite them to code)—NO more clarifying questions
 - approachProbeCount >= 2: stop probing, nudge to implementation
 
+If signals.sessionJustResumedAfterPauseSeconds is set, the candidate paused the session. Do NOT repeat the opening intro. If the pause was over a minute, briefly welcome them back in one short sentence, then continue from the transcript where you left off.
+
 Return JSON with reply and role (interviewer or hint).`
 
   return {
