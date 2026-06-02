@@ -1,6 +1,15 @@
 import { motion } from 'framer-motion'
-import { BookOpen, CheckCircle2, Clock, Mail, Mic, User, XCircle } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Mail,
+  Mic,
+  User,
+  XCircle,
+} from 'lucide-react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -23,6 +32,108 @@ import { RECOMMENDATION_LABELS } from '../prompts/interviewer/feedbackRubric'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { scrollToTop } from '../lib/scrollToTop'
 
+const COMPLETED_GROUPS_PREVIEW = 3
+const COMPLETED_ATTEMPTS_PREVIEW = 2
+const INCOMPLETE_PREVIEW = 4
+
+const historyToggleClassName =
+  'inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-accent-blue transition-colors hover:border-white/20 hover:bg-white/10'
+
+function ShowLessButton({ onClick, className = '' }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${historyToggleClassName} ${className}`.trim()}
+      aria-label="Show less"
+    >
+      <span>Show less</span>
+      <ChevronDown className="h-4 w-4 shrink-0 rotate-180" />
+    </button>
+  )
+}
+
+function ViewFullToggle({
+  expanded,
+  onToggle,
+  onShowLess,
+  canToggle,
+  collapsedLabel,
+}: {
+  expanded: boolean
+  onToggle: () => void
+  onShowLess: () => void
+  /** When true, list exceeds preview limits — show View all / Show less. */
+  canToggle: boolean
+  collapsedLabel: string
+}) {
+  if (!canToggle) return null
+
+  if (expanded) {
+    return (
+      <button
+        type="button"
+        onClick={onShowLess}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:border-white/20 hover:bg-white/10"
+        aria-expanded
+      >
+        <span>Show less</span>
+        <ChevronDown className="h-4 w-4 shrink-0 rotate-180" />
+      </button>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-accent-blue transition-colors hover:border-white/20 hover:bg-white/10"
+      aria-expanded={false}
+    >
+      <span>{collapsedLabel}</span>
+      <ChevronDown className="h-4 w-4 shrink-0" />
+    </button>
+  )
+}
+
+function SectionHeader({
+  icon,
+  iconClassName,
+  title,
+  subtitle,
+  count,
+  trailingAction,
+}: {
+  icon: ReactNode
+  iconClassName: string
+  title: string
+  subtitle: string
+  count?: number
+  trailingAction?: ReactNode
+}) {
+  return (
+    <div className="mb-4 flex items-start gap-3">
+      <div
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-medium text-text-primary">{title}</h2>
+          {count != null && count > 0 && (
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-text-secondary">
+              {count}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-text-secondary">{subtitle}</p>
+      </div>
+      {trailingAction ? <div className="shrink-0">{trailingAction}</div> : null}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const { user, isLoading } = useAuth()
   const { openSignIn } = useSignInModal()
@@ -33,6 +144,8 @@ export function DashboardPage() {
   const [totalPracticeSeconds, setTotalPracticeSeconds] = useState(0)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [completedExpanded, setCompletedExpanded] = useState(false)
+  const [incompleteExpanded, setIncompleteExpanded] = useState(false)
 
   const loadHistory = useCallback(async () => {
     if (!user || !isSupabaseConfigured()) {
@@ -96,6 +209,30 @@ export function DashboardPage() {
 
   const firstName = user.name.split(' ')[0]
   const initial = firstName.charAt(0).toUpperCase()
+
+  const totalCompletedAttempts = completedGroups.reduce(
+    (sum, group) => sum + group.attempts.length,
+    0,
+  )
+  const completedNeedsExpand =
+    completedGroups.length > COMPLETED_GROUPS_PREVIEW ||
+    completedGroups.some((group) => group.attempts.length > COMPLETED_ATTEMPTS_PREVIEW)
+  const visibleCompletedGroups = completedExpanded
+    ? completedGroups
+    : completedGroups.slice(0, COMPLETED_GROUPS_PREVIEW)
+  const visibleCompletedCount = completedExpanded
+    ? totalCompletedAttempts
+    : visibleCompletedGroups.reduce(
+        (sum, group) =>
+          sum +
+          Math.min(group.attempts.length, COMPLETED_ATTEMPTS_PREVIEW),
+        0,
+      )
+
+  const incompleteNeedsExpand = abandoned.length > INCOMPLETE_PREVIEW
+  const visibleAbandoned = incompleteExpanded
+    ? abandoned
+    : abandoned.slice(0, INCOMPLETE_PREVIEW)
 
   return (
     <main className="relative pt-28 pb-20 sm:pt-32">
@@ -200,92 +337,133 @@ export function DashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
             >
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-medium text-text-primary">Completed sessions</h2>
-                  <p className="text-xs text-text-secondary">
-                    Submitted interviews with feedback
-                  </p>
-                </div>
-              </div>
+              <SectionHeader
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                iconClassName="bg-emerald-500/15 text-emerald-400"
+                title="Completed sessions"
+                subtitle="Submitted interviews with feedback"
+                count={totalCompletedAttempts}
+                trailingAction={
+                  completedExpanded && completedNeedsExpand ? (
+                    <ShowLessButton onClick={() => setCompletedExpanded(false)} />
+                  ) : null
+                }
+              />
 
               {completedGroups.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-white/10 px-3 py-6 text-center text-sm text-text-secondary/80">
                   No completed sessions yet. Submit a practice session to see feedback here.
                 </p>
               ) : (
-                <div className="space-y-6">
-                  {completedGroups.map((group) => (
-                    <div key={group.questionSlug}>
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-text-primary">{group.questionTitle}</p>
-                        <Badge label={group.difficulty} variant={group.difficulty} />
-                        <span className="text-xs text-text-secondary">{group.category}</span>
-                        <span className="text-xs text-text-secondary/70">
-                          · {group.attempts.length} attempt
-                          {group.attempts.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
-                      <ul className="space-y-2">
-                        {group.attempts.map((attempt, index) => {
-                          const attemptNumber = group.attempts.length - index
-                          const fb = attempt.attempt_feedback
-                          const endedLabel = formatHistoryDate(
-                            attempt.ended_at ?? attempt.started_at,
-                          )
-                          const elapsed = formatElapsedOverPlanned(
-                            attempt.duration_seconds,
-                            attempt.session_minutes_planned,
-                          )
+                <>
+                  {completedNeedsExpand && (
+                    <p className="mb-4 text-xs text-text-secondary/80">
+                      {completedExpanded ? (
+                        <>Showing all {totalCompletedAttempts} sessions</>
+                      ) : (
+                        <>
+                          Showing {visibleCompletedCount} of {totalCompletedAttempts} sessions
+                          across {Math.min(completedGroups.length, COMPLETED_GROUPS_PREVIEW)} of{' '}
+                          {completedGroups.length} questions
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <div className="space-y-5">
+                    {visibleCompletedGroups.map((group) => {
+                      const attempts = completedExpanded
+                        ? group.attempts
+                        : group.attempts.slice(0, COMPLETED_ATTEMPTS_PREVIEW)
+                      const hiddenAttempts = group.attempts.length - attempts.length
 
-                          return (
-                            <li key={attempt.id}>
-                              <Link
-                                to={`/feedback/attempt/${attempt.id}`}
-                                className="block rounded-xl border border-white/10 bg-bg-primary/40 p-4 transition-colors hover:border-white/20 hover:bg-white/5"
-                              >
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                  <div>
-                                    <p className="text-xs font-medium text-text-secondary">
-                                      Attempt {attemptNumber} · {endedLabel}
-                                    </p>
-                                    <p className="mt-1 text-xs text-text-secondary">
-                                      {elapsed} elapsed
-                                      {attempt.all_tests_passed && (
-                                        <span className="ml-2 text-emerald-400/90">
-                                          · All tests passed
-                                        </span>
+                      return (
+                        <div
+                          key={group.questionSlug}
+                          className="rounded-xl border border-white/10 bg-bg-primary/30 p-4"
+                        >
+                          <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-text-primary">{group.questionTitle}</p>
+                            <Badge label={group.difficulty} variant={group.difficulty} />
+                            <span className="text-xs text-text-secondary">{group.category}</span>
+                            <span className="text-xs text-text-secondary/70">
+                              · {group.attempts.length} attempt
+                              {group.attempts.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <ul className="space-y-2">
+                            {attempts.map((attempt, index) => {
+                              const attemptNumber = group.attempts.length - index
+                              const fb = attempt.attempt_feedback
+                              const endedLabel = formatHistoryDate(
+                                attempt.ended_at ?? attempt.started_at,
+                              )
+                              const elapsed = formatElapsedOverPlanned(
+                                attempt.duration_seconds,
+                                attempt.session_minutes_planned,
+                              )
+
+                              return (
+                                <li key={attempt.id}>
+                                  <Link
+                                    to={`/feedback/attempt/${attempt.id}`}
+                                    className="block rounded-lg border border-white/10 bg-bg-primary/50 p-3 transition-colors hover:border-white/20 hover:bg-white/5"
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-medium text-text-secondary">
+                                          Attempt {attemptNumber} · {endedLabel}
+                                        </p>
+                                        <p className="mt-1 text-xs text-text-secondary">
+                                          {elapsed} elapsed
+                                          {attempt.all_tests_passed && (
+                                            <span className="ml-2 text-emerald-400/90">
+                                              · All tests passed
+                                            </span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      {fb && (
+                                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                                          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-semibold text-text-primary">
+                                            {fb.overall_score}/100
+                                          </span>
+                                          <Badge
+                                            label={RECOMMENDATION_LABELS[fb.recommendation]}
+                                          />
+                                        </div>
                                       )}
-                                    </p>
-                                  </div>
-                                  {fb && (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-semibold text-text-primary">
-                                        {fb.overall_score}/100
-                                      </span>
-                                      <Badge
-                                        label={RECOMMENDATION_LABELS[fb.recommendation]}
-                                      />
                                     </div>
-                                  )}
-                                </div>
-                                {fb && (
-                                  <p className="mt-2 text-sm text-text-secondary">{fb.headline}</p>
-                                )}
-                                <p className="mt-2 text-xs font-medium text-accent-blue">
-                                  View feedback →
-                                </p>
-                              </Link>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
+                                    {fb && (
+                                      <p className="mt-2 line-clamp-2 text-sm text-text-secondary">
+                                        {fb.headline}
+                                      </p>
+                                    )}
+                                    <p className="mt-2 text-xs font-medium text-accent-blue">
+                                      View feedback →
+                                    </p>
+                                  </Link>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                          {!completedExpanded && hiddenAttempts > 0 && (
+                            <p className="mt-2 text-xs text-text-secondary/70">
+                              +{hiddenAttempts} more attempt{hiddenAttempts === 1 ? '' : 's'} for
+                              this question
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <ViewFullToggle
+                    expanded={completedExpanded}
+                    onToggle={() => setCompletedExpanded(true)}
+                    onShowLess={() => setCompletedExpanded(false)}
+                    canToggle={completedNeedsExpand}
+                    collapsedLabel={`View all completed (${totalCompletedAttempts})`}
+                  />
+                </>
               )}
             </motion.section>
 
@@ -295,55 +473,75 @@ export function DashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                  <XCircle className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-medium text-text-primary">
-                    Incomplete interviews
-                  </h2>
-                  <p className="text-xs text-text-secondary">
-                    Sessions ended before submit — time still counts toward your total
-                  </p>
-                </div>
-              </div>
+              <SectionHeader
+                icon={<XCircle className="h-4 w-4" />}
+                iconClassName="bg-amber-500/15 text-amber-400"
+                title="Incomplete interviews"
+                subtitle="Sessions ended before submit — time still counts toward your total"
+                count={abandoned.length}
+                trailingAction={
+                  incompleteExpanded && incompleteNeedsExpand ? (
+                    <ShowLessButton onClick={() => setIncompleteExpanded(false)} />
+                  ) : null
+                }
+              />
 
               {abandoned.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-white/10 px-3 py-6 text-center text-sm text-text-secondary/80">
                   No incomplete sessions. Leaving early without submitting will appear here.
                 </p>
               ) : (
-                <ul className="space-y-3">
-                  {abandoned.map((attempt) => {
-                    const endedLabel = formatHistoryDate(attempt.ended_at ?? attempt.started_at)
-                    const elapsed = formatElapsedOverPlanned(
-                      attempt.duration_seconds,
-                      attempt.session_minutes_planned,
-                    )
+                <>
+                  {incompleteNeedsExpand && (
+                    <p className="mb-4 text-xs text-text-secondary/80">
+                      {incompleteExpanded ? (
+                        <>Showing all {abandoned.length} incomplete sessions</>
+                      ) : (
+                        <>
+                          Showing {visibleAbandoned.length} of {abandoned.length} incomplete
+                          sessions
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <ul className="space-y-2">
+                    {visibleAbandoned.map((attempt) => {
+                      const endedLabel = formatHistoryDate(attempt.ended_at ?? attempt.started_at)
+                      const elapsed = formatElapsedOverPlanned(
+                        attempt.duration_seconds,
+                        attempt.session_minutes_planned,
+                      )
 
-                    return (
-                      <li key={attempt.id}>
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-bg-primary/40 p-4">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-text-primary">
-                              {attempt.question_title}
-                            </p>
-                            <p className="mt-1 text-xs text-text-secondary">
-                              {endedLabel} · Cut short after {elapsed}
-                            </p>
+                      return (
+                        <li key={attempt.id}>
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-bg-primary/40 p-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-text-primary">
+                                {attempt.question_title}
+                              </p>
+                              <p className="mt-1 text-xs text-text-secondary">
+                                {endedLabel} · Cut short after {elapsed}
+                              </p>
+                            </div>
+                            <Link
+                              to={`/practice/${attempt.question_slug}`}
+                              className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-white/5"
+                            >
+                              Try again
+                            </Link>
                           </div>
-                          <Link
-                            to={`/practice/${attempt.question_slug}`}
-                            className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-white/5"
-                          >
-                            Try again
-                          </Link>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <ViewFullToggle
+                    expanded={incompleteExpanded}
+                    onToggle={() => setIncompleteExpanded(true)}
+                    onShowLess={() => setIncompleteExpanded(false)}
+                    canToggle={incompleteNeedsExpand}
+                    collapsedLabel={`View all incomplete (${abandoned.length})`}
+                  />
+                </>
               )}
             </motion.section>
           </>

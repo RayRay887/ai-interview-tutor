@@ -8,9 +8,9 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { FinalizeAttemptSnapshot } from '../lib/practiceAttempts'
 
 type AbandonHandler = () => Promise<void>
+type SaveHandler = () => Promise<void>
 type LeaveAction = () => void | Promise<void>
 
 interface LeaveActionRef {
@@ -21,9 +21,13 @@ interface LeaveActionRef {
 interface PracticeAttemptContextValue {
   attemptId: string | null
   leaveProtectionEnabled: boolean
+  /** Synchronous read for navigation blockers (React state may lag one frame). */
+  isLeaveProtectionActive: () => boolean
   setLeaveProtectionEnabled: (enabled: boolean) => void
   registerAbandonHandler: (handler: AbandonHandler | null) => void
+  registerSaveHandler: (handler: SaveHandler | null) => void
   abandonSession: () => Promise<void>
+  saveSessionProgress: () => Promise<void>
   requestLeave: (action: LeaveAction) => void
   openLeaveConfirmFromBlocker: (onConfirm: LeaveAction, onCancel: () => void) => void
 }
@@ -38,8 +42,18 @@ export function PracticeAttemptProvider({
   children: ReactNode
 }) {
   const abandonHandlerRef = useRef<AbandonHandler | null>(null)
+  const saveHandlerRef = useRef<SaveHandler | null>(null)
   const leaveActionRef = useRef<LeaveActionRef | null>(null)
-  const [leaveProtectionEnabled, setLeaveProtectionEnabled] = useState(false)
+  const leaveProtectionRef = useRef(false)
+  const [leaveProtectionEnabled, setLeaveProtectionEnabledState] = useState(false)
+  const setLeaveProtectionEnabled = useCallback((enabled: boolean) => {
+    leaveProtectionRef.current = enabled
+    setLeaveProtectionEnabledState(enabled)
+  }, [])
+  const isLeaveProtectionActive = useCallback(
+    () => leaveProtectionRef.current,
+    [],
+  )
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const [isConfirmingLeave, setIsConfirmingLeave] = useState(false)
 
@@ -47,9 +61,19 @@ export function PracticeAttemptProvider({
     abandonHandlerRef.current = handler
   }, [])
 
+  const registerSaveHandler = useCallback((handler: SaveHandler | null) => {
+    saveHandlerRef.current = handler
+  }, [])
+
   const abandonSession = useCallback(async () => {
     if (abandonHandlerRef.current) {
       await abandonHandlerRef.current()
+    }
+  }, [])
+
+  const saveSessionProgress = useCallback(async () => {
+    if (saveHandlerRef.current) {
+      await saveHandlerRef.current()
     }
   }, [])
 
@@ -84,36 +108,50 @@ export function PracticeAttemptProvider({
     setLeaveConfirmOpen(false)
   }, [])
 
-  const confirmLeave = useCallback(async () => {
-    const pending = leaveActionRef.current
-    leaveActionRef.current = null
-    setLeaveConfirmOpen(false)
-    setIsConfirmingLeave(true)
-    setLeaveProtectionEnabled(false)
+  const confirmLeave = useCallback(
+    async (mode: 'save' | 'discard') => {
+      const pending = leaveActionRef.current
+      leaveActionRef.current = null
+      setLeaveConfirmOpen(false)
+      setIsConfirmingLeave(true)
+      setLeaveProtectionEnabled(false)
 
-    try {
-      await abandonSession()
-      await pending?.onConfirm?.()
-    } finally {
-      setIsConfirmingLeave(false)
-    }
-  }, [abandonSession])
+      try {
+        if (mode === 'save') {
+          await saveSessionProgress()
+        } else {
+          await abandonSession()
+        }
+        await pending?.onConfirm?.()
+      } finally {
+        setIsConfirmingLeave(false)
+      }
+    },
+    [abandonSession, saveSessionProgress],
+  )
 
   const value = useMemo(
     () => ({
       attemptId,
       leaveProtectionEnabled,
+      isLeaveProtectionActive,
       setLeaveProtectionEnabled,
       registerAbandonHandler,
+      registerSaveHandler,
       abandonSession,
+      saveSessionProgress,
       requestLeave,
       openLeaveConfirmFromBlocker,
     }),
     [
       attemptId,
       leaveProtectionEnabled,
+      isLeaveProtectionActive,
+      setLeaveProtectionEnabled,
       registerAbandonHandler,
+      registerSaveHandler,
       abandonSession,
+      saveSessionProgress,
       requestLeave,
       openLeaveConfirmFromBlocker,
     ],
@@ -143,28 +181,36 @@ export function PracticeAttemptProvider({
               aria-labelledby="leave-interview-title"
             >
               <h2 id="leave-interview-title" className="text-lg font-semibold text-text-primary">
-                Leave interview?
+                Leave this question?
               </h2>
               <p className="mt-2 text-sm text-text-secondary">
-                Are you sure you want to leave? Your session will end without feedback and this
-                action cannot be reversed.
+                You can save your code and progress to resume later, or leave without saving and
+                end this session.
               </p>
-              <div className="mt-6 flex gap-3">
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => void confirmLeave('save')}
+                  disabled={isConfirmingLeave}
+                  className="w-full rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isConfirmingLeave ? 'Saving…' : 'Save progress & leave'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmLeave('discard')}
+                  disabled={isConfirmingLeave}
+                  className="w-full rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isConfirmingLeave ? 'Leaving…' : 'Leave without saving'}
+                </button>
                 <button
                   type="button"
                   onClick={cancelLeave}
                   disabled={isConfirmingLeave}
-                  className="flex-1 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Stay
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmLeave()}
-                  disabled={isConfirmingLeave}
-                  className="flex-1 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isConfirmingLeave ? 'Leaving…' : 'Leave interview'}
                 </button>
               </div>
             </motion.div>
@@ -186,5 +232,3 @@ export function usePracticeAttempt() {
 export function usePracticeAttemptOptional() {
   return useContext(PracticeAttemptContext)
 }
-
-export type { FinalizeAttemptSnapshot }
