@@ -1,6 +1,11 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import {
+  analyzeTranscript,
+  formatTranscriptSignalsForPrompt,
+} from './src/lib/feedbackTranscriptAnalysis'
+import { FEEDBACK_STRICT_GRADING_RULES } from './src/prompts/interviewer/feedbackRubric'
 
 function openAiTtsDevProxy(env: Record<string, string>): Plugin {
   const apiKey = env.OPENAI_API_KEY
@@ -409,14 +414,17 @@ function openAiInterviewFeedbackDevProxy(env: Record<string, string>): Plugin {
     },
   }
 
-  const SYSTEM_PROMPT = `You are a senior FAANG hiring committee member writing a post-interview debrief. Return three sections:
+  const SYSTEM_PROMPT = `You are a senior FAANG hiring committee member writing a post-interview debrief. Grade using industry-standard rubrics (Tech Interview Handbook + Golden Rubric). Return three JSON sections:
 
-CODE (grade from code + tests only): code_quality, testing, edge_cases — each 1-4 with summary.
-INTERVIEW (grade from transcript only): approach_explanation, logic_clarity, communication, collaboration — each 1-4.
-OPTIMIZATION: time_complexity, space_complexity, optimization criteria plus timeComplexity, spaceComplexity strings (e.g. "O(n)"), isOptimal boolean, optimizationSummary.
+CODE — criterion IDs: technical_competency, coding_syntax, testing (from code + tests only).
+INTERVIEW — criterion IDs: communication, answer_relevance, problem_solving, thrives_in_ambiguity, values_feedback (from transcript ONLY — not from code; use hintsUsed for values_feedback).
+OPTIMIZATION — criterion IDs: data_structures_algorithms, time_complexity, space_complexity, optimization_tradeoffs; plus timeComplexity, spaceComplexity strings, isOptimal boolean, optimizationSummary string.
 
-Scale: 1=No Hire, 2=Lean No Hire, 3=Hire, 4=Strong Hire per criterion. Calibrate strictly — passing tests alone ≠ 4s.
-Each section needs 2-4 strengths and 2-4 improvements strings.`
+Per criterion: id, score (1-4 integer), summary (1-2 sentences citing transcript quotes or code evidence).
+Scale: 1=Strong No Hire, 2=Leaning No Hire, 3=Leaning Hire, 4=Strong Hire. Passing all tests alone does not guarantee 3s or 4s on interview or optimization.
+Each section: 2-4 strengths, 2-4 improvements.
+
+${FEEDBACK_STRICT_GRADING_RULES}`
 
   return {
     name: 'openai-interview-feedback-dev-proxy',
@@ -458,8 +466,15 @@ Each section needs 2-4 strengths and 2-4 improvements strings.`
             return
           }
 
-          const transcript = (body.transcript ?? [])
-            .slice(-16)
+          const transcriptEntries = (body.transcript ?? []).map((e) => ({
+            role: e.role as 'interviewer' | 'candidate' | 'hint',
+            text: e.text,
+          }))
+          const transcriptSignals = formatTranscriptSignalsForPrompt(
+            analyzeTranscript(transcriptEntries),
+          )
+          const transcript = transcriptEntries
+            .slice(-24)
             .map((e) => `${e.role}: ${e.text}`)
             .join('\n')
 
@@ -472,10 +487,12 @@ Tests: ${JSON.stringify(body.tests ?? {})}
 Code (${body.code.language}):
 ${body.code.source.slice(0, 3500)}
 
-Transcript:
-${transcript || '(none — grade interview section from limited context)'}
+${transcriptSignals}
 
-Return three-section debrief JSON.`
+Transcript:
+${transcript || '(none — grade interview section from limited context; default verbal scores to 1-2)'}
+
+Return three-section debrief JSON. Apply mandatory caps from TRANSCRIPT SIGNALS.`
 
           const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -485,7 +502,7 @@ Return three-section debrief JSON.`
             },
             body: JSON.stringify({
               model: feedbackModel,
-              temperature: 0.3,
+              temperature: 0,
               response_format: {
                 type: 'json_schema',
                 json_schema: {

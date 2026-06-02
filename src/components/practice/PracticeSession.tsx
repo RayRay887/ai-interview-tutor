@@ -24,6 +24,7 @@ import {
 } from '../../data/languages'
 import type { Question } from '../../data/questions'
 import { isMicrophoneAvailable, useMicrophoneMonitor } from '../../hooks/useMicrophoneMonitor'
+import { stopAllInterviewAudio } from '../../hooks/useInterviewerTTS'
 import {
   runHiddenQuestionTests,
   runQuestionTests,
@@ -192,6 +193,7 @@ export function PracticeSession({
   const interview = useInterviewSession({
     question,
     microphoneDeviceId,
+    enabled: Boolean(microphoneDeviceId) && pauseReason !== 'microphone' && !isSubmitting,
     paused: isPaused,
     onMicLost: handleMicLost,
     getSnapshot,
@@ -453,6 +455,7 @@ export function PracticeSession({
     exitIntentRef.current = 'submitting'
     setIsSubmitting(true)
     setSubmitError(null)
+    stopAllInterviewAudio()
     interviewRef.current.endSession()
 
     try {

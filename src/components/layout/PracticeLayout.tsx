@@ -8,7 +8,7 @@ export function PracticeLayout() {
       <BackgroundEffects />
       <Navbar />
       <main className="min-h-0 flex-1 px-2 pt-20 pb-2 sm:px-3 lg:px-4">
-        <div className="mx-auto flex h-full w-full max-w-[100rem] flex-col">
+        <div className="mx-auto flex h-full w-full max-w-[1920px] flex-col">
           <Outlet />
         </div>
       </main>

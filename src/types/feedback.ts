@@ -16,11 +16,19 @@ export interface FeedbackSection {
   improvements: string[]
 }
 
+export interface OptimizationGradingFlags {
+  complexityQuestionAsked: boolean
+  complexityAnsweredInSpeech: boolean
+  complexityDodgedOrOffTopic: boolean
+  relevanceIssues: string[]
+}
+
 export interface OptimizationSection extends FeedbackSection {
   timeComplexity: string
   spaceComplexity: string
   isOptimal: boolean
   optimizationSummary: string
+  gradingFlags?: OptimizationGradingFlags
 }
 
 export interface InterviewFeedbackResult {
@@ -61,6 +69,7 @@ export interface InterviewFeedbackRequest {
 }
 
 export interface FeedbackNavigationState {
+  feedbackRequestId: string
   request: InterviewFeedbackRequest
   question: {
     slug: string

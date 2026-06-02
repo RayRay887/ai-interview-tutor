@@ -1,9 +1,7 @@
 import {
   CODE_RUBRIC,
-  computeOverallScore,
   INTERVIEW_RUBRIC,
   OPTIMIZATION_RUBRIC,
-  scoreToRecommendation,
   weightedSectionScore,
   type RubricCriterionDefinition,
 } from '../prompts/interviewer/feedbackRubric'
@@ -13,7 +11,42 @@ import type {
   InterviewFeedbackResult,
   OptimizationSection,
 } from '../types/feedback'
+import { applyStrictFeedbackCaps } from './applyStrictFeedbackCaps'
 import { isSupabaseConfigured, supabase } from './supabase'
+
+/** Dedupes feedback API calls so Strict Mode / effect re-runs cannot change the score. */
+const feedbackInflight = new Map<string, Promise<InterviewFeedbackResult>>()
+const feedbackResultCache = new Map<string, InterviewFeedbackResult>()
+
+export function getCachedFeedbackResult(
+  feedbackRequestId: string,
+): InterviewFeedbackResult | undefined {
+  return feedbackResultCache.get(feedbackRequestId)
+}
+
+export function clearFeedbackRequestCache(feedbackRequestId: string) {
+  feedbackResultCache.delete(feedbackRequestId)
+  feedbackInflight.delete(feedbackRequestId)
+}
+
+export function requestInterviewFeedbackOnce(
+  feedbackRequestId: string,
+  body: InterviewFeedbackRequest,
+): Promise<InterviewFeedbackResult> {
+  const cached = feedbackResultCache.get(feedbackRequestId)
+  if (cached) return Promise.resolve(cached)
+
+  let inflight = feedbackInflight.get(feedbackRequestId)
+  if (!inflight) {
+    inflight = requestInterviewFeedback(body).then((result) => {
+      feedbackResultCache.set(feedbackRequestId, result)
+      feedbackInflight.delete(feedbackRequestId)
+      return result
+    })
+    feedbackInflight.set(feedbackRequestId, inflight)
+  }
+  return inflight
+}
 
 export class InterviewFeedbackError extends Error {
   constructor(message: string) {
@@ -25,10 +58,11 @@ export class InterviewFeedbackError extends Error {
 function normalizeCriteria(
   raw: { id?: string; score?: number; summary?: string }[],
   rubric: RubricCriterionDefinition[],
+  missingDefault = 1,
 ) {
   return rubric.map((def) => {
     const match = raw.find((item) => item.id === def.id)
-    const score = Math.min(4, Math.max(1, Math.round(Number(match?.score) || 2)))
+    const score = Math.min(4, Math.max(1, Math.round(Number(match?.score) || missingDefault)))
     return {
       id: def.id,
       name: def.name,
@@ -42,11 +76,12 @@ function normalizeCriteria(
 function normalizeSection(
   raw: Record<string, unknown> | undefined,
   rubric: RubricCriterionDefinition[],
+  missingDefault = 1,
 ): FeedbackSection {
   const rawCriteria = Array.isArray(raw?.criteria)
     ? (raw.criteria as { id?: string; score?: number; summary?: string }[])
     : []
-  const criteria = normalizeCriteria(rawCriteria, rubric)
+  const criteria = normalizeCriteria(rawCriteria, rubric, missingDefault)
   const strengths = Array.isArray(raw?.strengths)
     ? raw.strengths.filter((s): s is string => typeof s === 'string').slice(0, 4)
     : []
@@ -77,10 +112,10 @@ function normalizeOptimizationSection(
         ? raw.spaceComplexity.trim()
         : 'Not discussed',
     isOptimal: raw?.isOptimal === true,
-    optimizationSummary:
+        optimizationSummary:
       typeof raw?.optimizationSummary === 'string' && raw.optimizationSummary.trim()
         ? raw.optimizationSummary.trim()
-        : base.criteria.find((c) => c.id === 'optimization')?.summary ?? '',
+        : base.criteria.find((c) => c.id === 'optimization_tradeoffs')?.summary ?? '',
   }
 }
 
@@ -88,23 +123,15 @@ function normalizeFeedback(
   parsed: Record<string, unknown>,
   request: InterviewFeedbackRequest,
 ): InterviewFeedbackResult {
-  const code = normalizeSection(parsed.code as Record<string, unknown>, CODE_RUBRIC)
-  const interview = normalizeSection(parsed.interview as Record<string, unknown>, INTERVIEW_RUBRIC)
+  const code = normalizeSection(parsed.code as Record<string, unknown>, CODE_RUBRIC, 2)
+  const interview = normalizeSection(
+    parsed.interview as Record<string, unknown>,
+    INTERVIEW_RUBRIC,
+    1,
+  )
   const optimization = normalizeOptimizationSection(
     parsed.optimization as Record<string, unknown>,
   )
-
-  const overallScore = computeOverallScore({
-    code: code.score,
-    interview: interview.score,
-    optimization: optimization.score,
-  })
-
-  const recommendation =
-    typeof parsed.recommendation === 'string' &&
-    ['strong_hire', 'hire', 'lean_hire', 'lean_no_hire', 'no_hire'].includes(parsed.recommendation)
-      ? (parsed.recommendation as InterviewFeedbackResult['recommendation'])
-      : scoreToRecommendation(overallScore)
 
   const headline =
     typeof parsed.headline === 'string' && parsed.headline.trim()
@@ -113,14 +140,16 @@ function normalizeFeedback(
         ? 'Solid session — review each section below for detailed feedback.'
         : 'Solution not fully passing — focus on code correctness and testing next time.'
 
-  return {
-    overallScore,
-    recommendation,
+  const draft: InterviewFeedbackResult = {
+    overallScore: 0,
+    recommendation: 'no_hire',
     headline,
     code,
     interview,
     optimization,
   }
+
+  return applyStrictFeedbackCaps(draft, request)
 }
 
 async function fetchDevFeedback(body: InterviewFeedbackRequest): Promise<InterviewFeedbackResult> {

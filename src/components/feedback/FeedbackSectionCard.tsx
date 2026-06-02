@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CheckCircle2, TrendingUp } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react'
 import type { FeedbackSection, OptimizationSection } from '../../types/feedback'
 
 function scoreBarColor(score: number): string {
@@ -102,8 +102,26 @@ export function FeedbackSectionCard({
 }
 
 export function OptimizationExtras({ section }: { section: OptimizationSection }) {
+  const flags = section.gradingFlags
+  const complexityMissed =
+    flags?.complexityQuestionAsked && !flags.complexityAnsweredInSpeech
+
   return (
-    <div className="mb-5 grid gap-3 sm:grid-cols-2">
+    <div className="mb-5 space-y-3">
+      {complexityMissed && (
+        <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div>
+            <p className="text-sm font-medium text-amber-200">Complexity question not answered</p>
+            <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+              The interviewer asked about time or space complexity, but your spoken answers did not
+              include Big-O analysis. At FAANG-style interviews this typically caps optimization
+              and relevance scores regardless of passing tests.
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
       <div className="rounded-xl border border-white/10 bg-bg-primary/40 p-3">
         <p className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">
           Time complexity
@@ -128,6 +146,7 @@ export function OptimizationExtras({ section }: { section: OptimizationSection }
             {section.optimizationSummary}
           </p>
         )}
+      </div>
       </div>
     </div>
   )

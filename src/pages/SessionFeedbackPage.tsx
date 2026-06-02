@@ -17,7 +17,7 @@ import { Button } from '../components/ui/Button'
 import { GradientText } from '../components/ui/GradientText'
 import { useAuth } from '../context/AuthContext'
 import { getQuestionBySlug } from '../data/questions'
-import { requestInterviewFeedback } from '../lib/feedbackApi'
+import { requestInterviewFeedbackOnce } from '../lib/feedbackApi'
 import {
   buildFeedbackRequestFromAttempt,
   buildFinalizeSnapshotFromAttempt,
@@ -105,7 +105,7 @@ export function SessionFeedbackPage() {
           catalog?.constraints,
         )
 
-        const result = await requestInterviewFeedback(request)
+        const result = await requestInterviewFeedbackOnce(attemptIdValue, request)
         setFeedback(result)
         await saveAttemptFeedback(attemptIdValue, userId, result)
       } catch (err) {

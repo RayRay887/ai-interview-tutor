@@ -1,4 +1,8 @@
 import { jsonResponse, optionsResponse } from '../_shared/cors.ts'
+import {
+  analyzeTranscript,
+  formatTranscriptSignalsForPrompt,
+} from '../_shared/feedbackTranscriptAnalysis.ts'
 
 interface FeedbackRequest {
   question: {
@@ -83,14 +87,24 @@ const feedbackJsonSchema = {
   },
 }
 
-const SYSTEM_PROMPT = `You are a senior FAANG hiring committee member writing a post-interview debrief. Return three sections:
+const STRICT_RULES = `STRICT EVIDENCE-BASED GRADING (non-negotiable):
+- Grade ONLY from transcript quotes and submitted code/tests. Do not infer skills the candidate did not demonstrate in speech.
+- If the interviewer asked about time or space complexity and the candidate did not state Big-O in the transcript → time_complexity=1, space_complexity=1, optimization_tradeoffs≤2, answer_relevance≤2.
+- Off-topic or evasive answers to direct questions → answer_relevance≤2 and communication≤2. Quote the exchange in summaries.
+- Passing all tests does NOT raise interview or optimization scores. Working code without verbal complexity analysis caps optimization at Lean No Hire.
+- Summaries must cite transcript evidence. Never give 3 or 4 on verbal criteria without clear spoken evidence.
+- hintsUsed >= 2 caps thrives_in_ambiguity and values_feedback at 2 unless transcript shows strong recovery.`
 
-CODE (grade from code + tests only): code_quality, testing, edge_cases — each 1-4 with summary.
-INTERVIEW (grade from transcript only): approach_explanation, logic_clarity, communication, collaboration — each 1-4.
-OPTIMIZATION: time_complexity, space_complexity, optimization criteria plus timeComplexity, spaceComplexity strings, isOptimal boolean, optimizationSummary.
+const SYSTEM_PROMPT = `You are a senior FAANG hiring committee member writing a post-interview debrief. Grade using Tech Interview Handbook + Golden Rubric. Return three JSON sections:
 
-Scale: 1=No Hire, 2=Lean No Hire, 3=Hire, 4=Strong Hire. Calibrate strictly.
-Each section: 2-4 strengths and 2-4 improvements.`
+CODE — IDs: technical_competency, coding_syntax, testing (code + tests only).
+INTERVIEW — IDs: communication, answer_relevance, problem_solving, thrives_in_ambiguity, values_feedback (transcript ONLY; hintsUsed calibrates values_feedback).
+OPTIMIZATION — IDs: data_structures_algorithms, time_complexity, space_complexity, optimization_tradeoffs; plus timeComplexity, spaceComplexity, isOptimal, optimizationSummary.
+
+Per criterion: id, score 1-4, summary citing evidence. Scale: 1=Strong No Hire … 4=Strong Hire.
+Each section: 2-4 strengths, 2-4 improvements.
+
+${STRICT_RULES}`
 
 function truncateCode(source: string): string {
   if (source.length <= CODE_MAX_CHARS) return source
@@ -127,6 +141,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Missing question or code.' }, 400)
     }
 
+    const transcriptEntries = (body.transcript ?? []).map((e) => ({
+      role: (e.role === 'candidate' || e.role === 'hint' ? e.role : 'interviewer') as
+        | 'interviewer'
+        | 'candidate'
+        | 'hint',
+      text: e.text,
+    }))
+    const transcriptSignals = formatTranscriptSignalsForPrompt(analyzeTranscript(transcriptEntries))
     const transcriptText = sliceTranscript(body.transcript ?? [])
       .map((e) => `${e.role}: ${e.text}`)
       .join('\n')
@@ -145,10 +167,12 @@ Tests: ${body.tests.passed}/${body.tests.total}${body.tests.allPassed ? ' all pa
 Code (${body.code.language}):
 ${truncateCode(body.code.source)}
 
-Transcript:
-${transcriptText || '(none)'}
+${transcriptSignals}
 
-Return three-section debrief JSON.`
+Transcript:
+${transcriptText || '(none — default verbal scores to 1-2)'}
+
+Return three-section debrief JSON. Apply mandatory caps from TRANSCRIPT SIGNALS.`
 
     const model =
       Deno.env.get('OPENAI_FEEDBACK_MODEL') ?? Deno.env.get('OPENAI_INTERVIEW_MODEL') ?? 'gpt-4o-mini'
@@ -161,7 +185,7 @@ Return three-section debrief JSON.`
       },
       body: JSON.stringify({
         model,
-        temperature: 0.3,
+        temperature: 0,
         response_format: {
           type: 'json_schema',
           json_schema: {
