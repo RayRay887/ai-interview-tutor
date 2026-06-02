@@ -26,6 +26,7 @@ export interface InterviewTurnRequest {
     candidateAskedForHint?: boolean
     approachClarity?: 'vague' | 'partial' | 'concrete'
     approachProbeCount?: number
+    sessionJustResumedAfterPauseSeconds?: number
   }
   hintState?: { levelUsed?: number }
 }

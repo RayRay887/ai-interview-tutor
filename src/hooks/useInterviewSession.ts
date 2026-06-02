@@ -19,7 +19,7 @@ import type {
   InterviewerTranscriptEntry,
 } from '../prompts/interviewer/types'
 import { toInterviewQuestionContext, type InterviewPhase } from '../types/interview'
-import { stopAllInterviewAudio, useInterviewerTTS } from './useInterviewerTTS'
+import { useInterviewerTTS } from './useInterviewerTTS'
 import { useWhisperCapture } from './useWhisperCapture'
 
 interface UseInterviewSessionOptions {
@@ -98,8 +98,15 @@ export function useInterviewSession({
   const [transcript, setTranscript] = useState<InterviewerTranscriptEntry[]>([])
   const [hintLevel, setHintLevel] = useState<HintLevel>(0)
 
-  const { speak, prefetchSpeech, playSpeechBlob, isSpeaking, playBlocked, playPending } =
-    useInterviewerTTS()
+  const {
+    speak,
+    prefetchSpeech,
+    playSpeechBlob,
+    stop: stopTTS,
+    isSpeaking,
+    playBlocked,
+    playPending,
+  } = useInterviewerTTS()
 
   const getSnapshotRef = useRef(getSnapshot)
   const onTestsJustRunConsumedRef = useRef(onTestsJustRunConsumed)
@@ -115,7 +122,12 @@ export function useInterviewSession({
   const interviewerNameRef = useRef(pickInterviewerName())
   const speechStopRef = useRef<() => void>(() => undefined)
   const speechResumeRef = useRef<(() => Promise<void>) | undefined>(undefined)
+  const ttsStopRef = useRef<() => void>(() => undefined)
   const sessionRunIdRef = useRef(0)
+  const pauseStartedAtRef = useRef<number | null>(null)
+  const pendingOpeningRef = useRef<string | null>(null)
+  const resumePauseSecondsRef = useRef(0)
+  const prevPausedRef = useRef(paused)
 
   useEffect(() => {
     pausedRef.current = paused
@@ -187,6 +199,12 @@ export function useInterviewSession({
       if (import.meta.env.DEV) {
         const stats = buildContextStats(context, { isOpening: false })
         console.debug('[voice-turn] context', stats)
+      }
+
+      const pauseSeconds = resumePauseSecondsRef.current
+      if (pauseSeconds > 0) {
+        context.signals.sessionJustResumedAfterPauseSeconds = pauseSeconds
+        resumePauseSecondsRef.current = 0
       }
 
       codeAtLastTurnRef.current = snapshot.code
@@ -313,6 +331,7 @@ export function useInterviewSession({
 
   speechStopRef.current = speech.stop
   speechResumeRef.current = speech.resumeAudioContext
+  ttsStopRef.current = stopTTS
 
   const startSession = useCallback(async () => {
     const runId = ++sessionRunIdRef.current
@@ -329,6 +348,9 @@ export function useInterviewSession({
     lastCandidateSpeechRef.current = Date.now()
     setConversationStarted(false)
     processingRef.current = false
+    pendingOpeningRef.current = null
+    resumePauseSecondsRef.current = 0
+    pauseStartedAtRef.current = null
     interviewerNameRef.current = pickInterviewerName()
 
     try {
@@ -336,15 +358,17 @@ export function useInterviewSession({
         questionContext,
         interviewerNameRef.current,
       )
-      if (runId !== sessionRunIdRef.current || pausedRef.current) return
-
       const opening = openingTurn.reply
+      pendingOpeningRef.current = opening
+
+      if (runId !== sessionRunIdRef.current || pausedRef.current) return
 
       setPhase('speaking')
       await speak(opening)
       if (runId !== sessionRunIdRef.current || pausedRef.current) return
 
       appendTranscript('interviewer', opening)
+      pendingOpeningRef.current = null
       await speechResumeRef.current?.()
       if (runId !== sessionRunIdRef.current || pausedRef.current) return
 
@@ -363,6 +387,7 @@ export function useInterviewSession({
         if (runId !== sessionRunIdRef.current || pausedRef.current) return
 
         appendTranscript('interviewer', fallback.reply)
+        pendingOpeningRef.current = null
         setConversationStarted(true)
         lastSessionPhaseRef.current = 'approach'
         setPhase('listening')
@@ -381,27 +406,61 @@ export function useInterviewSession({
 
     return () => {
       sessionRunIdRef.current += 1
-      stopAllInterviewAudio()
+      ttsStopRef.current()
       speechStopRef.current()
       processingRef.current = false
     }
   }, [enabled, question.slug, startSession])
 
   useEffect(() => {
-    if (!paused) return
+    const wasPaused = prevPausedRef.current
+    prevPausedRef.current = paused
 
-    sessionRunIdRef.current += 1
-    stopAllInterviewAudio()
-    speechStopRef.current()
-    processingRef.current = false
-  }, [paused])
+    if (paused) {
+      pauseStartedAtRef.current = Date.now()
+      sessionRunIdRef.current += 1
+      ttsStopRef.current()
+      speechStopRef.current()
+      processingRef.current = false
+      return
+    }
+
+    if (!wasPaused) return
+
+    if (pauseStartedAtRef.current !== null) {
+      resumePauseSecondsRef.current = Math.round(
+        (Date.now() - pauseStartedAtRef.current) / 1000,
+      )
+      pauseStartedAtRef.current = null
+    }
+
+    let resumedConversation = false
+
+    if (transcriptRef.current.length > 0) {
+      setConversationStarted(true)
+      resumedConversation = true
+    } else if (pendingOpeningRef.current) {
+      appendTranscript('interviewer', pendingOpeningRef.current)
+      pendingOpeningRef.current = null
+      setConversationStarted(true)
+      resumedConversation = true
+    }
+
+    if (resumedConversation) {
+      processingRef.current = false
+      setPhase((current) => (current === 'error' ? current : 'listening'))
+    }
+  }, [paused, appendTranscript])
 
   const isBusy = phase === 'starting' || phase === 'thinking' || isSpeaking
 
   const retryStart = useCallback(() => {
     sessionRunIdRef.current += 1
-    stopAllInterviewAudio()
+    ttsStopRef.current()
     speechStopRef.current()
+    pendingOpeningRef.current = null
+    resumePauseSecondsRef.current = 0
+    pauseStartedAtRef.current = null
     void startSession()
   }, [startSession])
 
