@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
   CheckCircle2,
@@ -9,7 +10,6 @@ import {
   Pause,
   Play,
   Plus,
-  Sparkles,
   Trash2,
   XCircle,
 } from 'lucide-react'
@@ -67,6 +67,39 @@ function createIdleResults(count: number): TestResult[] {
   return Array.from({ length: count }, () => ({ status: 'idle' }))
 }
 
+function TestFailureDetails({ result }: { result: TestResult }) {
+  if (result.status !== 'failed') return null
+
+  if (result.expected != null && result.actual != null) {
+    return (
+      <div className="mt-2 space-y-1 rounded border border-rose-500/20 bg-rose-500/5 p-2 font-mono text-[10px]">
+        <p>
+          <span className="text-text-secondary">Expected value: </span>
+          <span className="text-emerald-400/90">{result.expected}</span>
+        </p>
+        <p>
+          <span className="text-text-secondary">Actual value: </span>
+          <span className="text-rose-400/90">{result.actual}</span>
+        </p>
+      </div>
+    )
+  }
+
+  if (result.error) {
+    return <p className="mt-1 font-mono text-[10px] text-rose-400/90">{result.error}</p>
+  }
+
+  if (result.actual) {
+    return (
+      <p className="mt-1 font-mono text-[10px] text-rose-400/90">
+        Actual value: {result.actual}
+      </p>
+    )
+  }
+
+  return null
+}
+
 export function PracticeSession({
   question,
   microphoneDeviceId,
@@ -88,9 +121,11 @@ export function PracticeSession({
   const [testResults, setTestResults] = useState<TestResult[]>(() =>
     createIdleResults(question.examples.length),
   )
-  const [hiddenSummary, setHiddenSummary] = useState<{ passed: number; total: number } | null>(
-    null,
+  const hiddenTestCount = userTestMode ? 0 : (question.hiddenTests?.length ?? 0)
+  const [hiddenTestResults, setHiddenTestResults] = useState<TestResult[]>(() =>
+    hiddenTestCount > 0 ? createIdleResults(hiddenTestCount) : [],
   )
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false)
   const testsJustRunRef = useRef(false)
 
   const isPaused = pauseReason !== null
@@ -111,19 +146,21 @@ export function PracticeSession({
     return question.examples
   }, [question.examples, customTestCases, userTestMode])
 
-  const totalCount = visibleTestCases.length
+  const totalCount = visibleTestCases.length + hiddenTestResults.length
+  const hiddenPassedCount = hiddenTestResults.filter((result) => result.status === 'passed').length
 
   const getSnapshot = useCallback((): PracticeSessionSnapshot => {
-    const passed = testResults.filter((result) => result.status === 'passed').length
+    const passed =
+      testResults.filter((result) => result.status === 'passed').length + hiddenPassedCount
     return {
       code,
       language,
       consoleEntries,
       passedCount: passed,
-      totalCount: visibleTestCases.length,
+      totalCount,
       lastFailures: buildLastFailures(testResults, visibleTestCases),
-      hiddenPassed: hiddenSummary?.passed,
-      hiddenTotal: hiddenSummary?.total,
+      hiddenPassed: hiddenTestResults.length > 0 ? hiddenPassedCount : undefined,
+      hiddenTotal: hiddenTestResults.length > 0 ? hiddenTestResults.length : undefined,
       remainingSeconds,
       sessionMinutes,
       testsJustRun: testsJustRunRef.current,
@@ -134,7 +171,9 @@ export function PracticeSession({
     consoleEntries,
     testResults,
     visibleTestCases,
-    hiddenSummary,
+    hiddenPassedCount,
+    hiddenTestResults.length,
+    totalCount,
     remainingSeconds,
     sessionMinutes,
   ])
@@ -175,7 +214,10 @@ export function PracticeSession({
   }, [pauseReason, microphoneDeviceId])
 
   const resetTestResults = () => {
-    setTestResults(createIdleResults(question.examples.length + customTestCases.length))
+    setTestResults(createIdleResults(visibleTestCases.length))
+    setHiddenTestResults(
+      hiddenTestCount > 0 ? createIdleResults(hiddenTestCount) : [],
+    )
   }
 
   const handleLanguageChange = (nextLanguage: CodeLanguage) => {
@@ -234,8 +276,10 @@ export function PracticeSession({
     if (isPaused) return
     setIsRunningTests(true)
     setConsoleEntries([])
-    setHiddenSummary(null)
     setTestResults(visibleTestCases.map(() => ({ status: 'running' })))
+    if (hiddenTestCount > 0) {
+      setHiddenTestResults(createIdleResults(hiddenTestCount))
+    }
 
     try {
       const result = await runQuestionTests(question, code, language, visibleTestCases)
@@ -252,13 +296,14 @@ export function PracticeSession({
         question.hiddenTests &&
         question.hiddenTests.length > 0
       ) {
+        setHiddenTestResults(question.hiddenTests.map(() => ({ status: 'running' })))
         const hidden = await runHiddenQuestionTests(
           question,
           code,
           language,
           question.hiddenTests,
         )
-        setHiddenSummary({ passed: hidden.passed, total: hidden.total })
+        setHiddenTestResults(hidden.testResults)
         setConsoleEntries((current) => [...current, ...hidden.consoleEntries])
       }
     } catch (error) {
@@ -290,13 +335,20 @@ export function PracticeSession({
     setPauseReason(null)
   }
 
-  const passedCount = testResults.filter((result) => result.status === 'passed').length
-  const hasRunTests = testResults.some((result) => result.status !== 'idle')
-  const allVisiblePassed = hasRunTests && passedCount === totalCount
+  const visiblePassedCount = testResults.filter((result) => result.status === 'passed').length
+  const passedCount = visiblePassedCount + hiddenPassedCount
+  const hasRunVisibleTests = testResults.some((result) => result.status !== 'idle')
+  const hasRunHiddenTests = hiddenTestResults.some((result) => result.status !== 'idle')
+  const hasRunTests = hasRunVisibleTests || hasRunHiddenTests
+  const allVisiblePassed =
+    hasRunVisibleTests &&
+    testResults.length > 0 &&
+    testResults.every((result) => result.status === 'passed')
+  const hasHiddenTests = hiddenTestResults.length > 0
   const allHiddenPassed =
-    hiddenSummary !== null && hiddenSummary.passed === hiddenSummary.total
-  const allPassed =
-    allVisiblePassed && (userTestMode || hiddenSummary === null || allHiddenPassed)
+    !hasHiddenTests ||
+    (hasRunHiddenTests && hiddenTestResults.every((result) => result.status === 'passed'))
+  const allPassed = allVisiblePassed && allHiddenPassed
 
   useEffect(() => {
     if (!user) return
@@ -323,14 +375,28 @@ export function PracticeSession({
     return () => window.clearInterval(id)
   }, [isTimerRunning])
 
+  useEffect(() => {
+    if (!submitConfirmOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSubmitConfirmOpen(false)
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [submitConfirmOpen])
+
   const handleSubmitFeedback = useCallback(() => {
-    if (!user || !hasRunTests || isPaused) return
+    if (!user || isPaused) return
 
     interview.endSession()
 
     const questionContext = toInterviewQuestionContext(question)
-    const totalWithHidden = totalCount + (hiddenSummary?.total ?? 0)
-    const passedWithHidden = passedCount + (hiddenSummary?.passed ?? 0)
     const minutesUsed = Math.max(
       0,
       Math.round((minutesToSeconds(sessionMinutes) - remainingSeconds) / 60),
@@ -341,11 +407,11 @@ export function PracticeSession({
         question: questionContext,
         code: { source: code, language },
         tests: {
-          passed: passedWithHidden,
-          total: totalWithHidden,
+          passed: passedCount,
+          total: totalCount,
           allPassed,
-          hiddenPassed: hiddenSummary?.passed,
-          hiddenTotal: hiddenSummary?.total,
+          hiddenPassed: hiddenTestResults.length > 0 ? hiddenPassedCount : undefined,
+          hiddenTotal: hiddenTestResults.length > 0 ? hiddenTestResults.length : undefined,
           lastFailures: buildLastFailures(testResults, visibleTestCases),
         },
         transcript: interview.transcript.map(({ role, text }) => ({ role, text })),
@@ -366,13 +432,13 @@ export function PracticeSession({
     navigate(`/feedback/${question.slug}`, { state })
   }, [
     user,
-    hasRunTests,
     isPaused,
     interview,
     question,
     totalCount,
-    hiddenSummary,
     passedCount,
+    hiddenTestResults.length,
+    hiddenPassedCount,
     sessionMinutes,
     remainingSeconds,
     code,
@@ -382,6 +448,11 @@ export function PracticeSession({
     visibleTestCases,
     navigate,
   ])
+
+  const handleConfirmSubmit = () => {
+    setSubmitConfirmOpen(false)
+    handleSubmitFeedback()
+  }
 
   const renderTestStatus = (status: TestResult['status']) => {
     if (status === 'passed') {
@@ -461,7 +532,7 @@ export function PracticeSession({
 
       <div className="relative min-h-0 flex-1">
         <div
-          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,26%)_minmax(0,1fr)_minmax(260px,300px)] ${
+          className={`grid h-full min-h-0 lg:grid-cols-[minmax(240px,24%)_minmax(0,1fr)_minmax(280px,380px)] ${
             isPaused ? 'pointer-events-none select-none' : ''
           }`}
           aria-hidden={isPaused}
@@ -585,29 +656,16 @@ export function PracticeSession({
                 ) : null
               }
               action={
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  {hasRunTests && (
-                    <button
-                      type="button"
-                      onClick={handleSubmitFeedback}
-                      disabled={isPaused}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/30 bg-accent-purple/15 px-3 py-1.5 text-xs font-medium text-accent-purple transition-colors hover:bg-accent-purple/25 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Submit for feedback
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleRunTests}
-                    disabled={isRunningTests || isPaused}
-                    className="rounded-lg bg-accent-blue/20 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/30 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isRunningTests ? 'Running...' : 'Run tests'}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleRunTests}
+                  disabled={isRunningTests || isPaused}
+                  className="shrink-0 rounded-lg bg-accent-blue/20 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/30 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isRunningTests ? 'Running...' : 'Run tests'}
+                </button>
               }
-              contentClassName="theme-scrollbar max-h-64 overflow-y-auto p-4 pt-0"
+              contentClassName="theme-scrollbar h-40 overflow-y-auto p-4 pt-0"
             >
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -632,11 +690,7 @@ export function PracticeSession({
                         <p className="font-mono text-[10px] text-emerald-400/90">
                           → {example.output}
                         </p>
-                        {result?.actual && status === 'failed' && (
-                          <p className="mt-1 font-mono text-[10px] text-rose-400/90">
-                            Got: {result.actual}
-                          </p>
-                        )}
+                        {result && <TestFailureDetails result={result} />}
                       </div>
                     )
                   })}
@@ -708,16 +762,7 @@ export function PracticeSession({
                               className="w-full rounded border border-white/10 bg-bg-secondary/60 px-2 py-1.5 font-mono text-[10px] text-text-primary outline-none focus:border-accent-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
                             />
 
-                            {result?.actual && status === 'failed' && (
-                              <p className="mt-2 font-mono text-[10px] text-rose-400/90">
-                                Got: {result.actual}
-                              </p>
-                            )}
-                            {result?.error && status === 'failed' && !result.actual && (
-                              <p className="mt-2 font-mono text-[10px] text-rose-400/90">
-                                {result.error}
-                              </p>
-                            )}
+                            {result && <TestFailureDetails result={result} />}
                           </div>
                         )
                       })}
@@ -737,22 +782,27 @@ export function PracticeSession({
                 </button>
                 )}
 
-                {!userTestMode && hiddenSummary && (
-                  <div className="rounded-lg border border-white/10 bg-bg-primary/60 p-3">
-                    <div className="flex items-center gap-2">
-                      {hiddenSummary.passed === hiddenSummary.total ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                      ) : (
-                        <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                      )}
-                      <span className="text-xs font-medium text-text-primary">Hidden tests</span>
-                    </div>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      Hidden: {hiddenSummary.passed}/{hiddenSummary.total} passed
-                      {hiddenSummary.passed < hiddenSummary.total
-                        ? ` (${hiddenSummary.total - hiddenSummary.passed} failed)`
-                        : ''}
+                {!userTestMode && hiddenTestResults.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-medium tracking-wider text-text-secondary uppercase">
+                      Hidden
                     </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {hiddenTestResults.map((result, index) => (
+                        <div
+                          key={`hidden-${index}`}
+                          className="rounded-lg border border-white/10 bg-bg-primary/60 p-2.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            {renderTestStatus(result.status)}
+                            <span className="text-xs font-medium text-text-primary">
+                              Hidden test case #{index + 1}
+                            </span>
+                          </div>
+                          <TestFailureDetails result={result} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -769,6 +819,8 @@ export function PracticeSession({
             showPlayButton={interview.playBlocked}
             onRetry={() => void interview.retryStart()}
             onPlayIntroduction={() => void interview.playIntroduction()}
+            onSubmit={() => setSubmitConfirmOpen(true)}
+            submitDisabled={isPaused}
           />
         </div>
 
@@ -803,6 +855,54 @@ export function PracticeSession({
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {submitConfirmOpen && (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-bg-primary/80 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSubmitConfirmOpen(false)}
+          >
+            <motion.div
+              className="glass glow-blue w-full max-w-sm rounded-2xl border border-white/10 p-6 shadow-2xl"
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="submit-confirm-title"
+            >
+              <h2 id="submit-confirm-title" className="text-lg font-semibold text-text-primary">
+                Submit session?
+              </h2>
+              <p className="mt-2 text-sm text-text-secondary">
+                Are you sure you want to submit? This will end your interview and generate feedback.
+                This action cannot be reversed.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSubmitConfirmOpen(false)}
+                  className="flex-1 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSubmit}
+                  className="flex-1 rounded-lg bg-linear-to-r from-accent-blue to-accent-purple px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  Submit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

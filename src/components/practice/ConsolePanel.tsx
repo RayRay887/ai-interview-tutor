@@ -22,6 +22,7 @@ export function ConsolePanel({ entries }: ConsolePanelProps) {
   return (
     <CollapsibleSection
       title="Console"
+      defaultOpen={false}
       icon={<Terminal className="h-3.5 w-3.5 text-accent-blue" />}
       badge={
         errorCount > 0 ? (

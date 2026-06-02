@@ -24,6 +24,7 @@ export type TestStatus = 'idle' | 'running' | 'passed' | 'failed'
 export interface TestResult {
   status: TestStatus
   actual?: string
+  expected?: string
   error?: string
 }
 
@@ -36,6 +37,7 @@ export interface HiddenTestRunResult {
   passed: number
   total: number
   consoleEntries: ConsoleEntry[]
+  testResults: TestResult[]
 }
 
 let esbuildReady = false
@@ -319,6 +321,7 @@ export async function runQuestionTests(
       consoleEntries.push(createEntry('error', message, 'test'))
       testResults[index] = {
         status: 'failed',
+        expected: stablePreview(expected),
         actual: actualLabel,
         error: message,
       }
@@ -337,7 +340,7 @@ export async function runQuestionTests(
   return { consoleEntries, testResults }
 }
 
-/** Run hidden cases without revealing inputs/outputs in console messages. */
+/** Run hidden cases; per-case expected/actual are returned for the UI only (not logged to console). */
 export async function runHiddenQuestionTests(
   question: Question,
   code: string,
@@ -347,9 +350,15 @@ export async function runHiddenQuestionTests(
   const consoleEntries: ConsoleEntry[] = [
     createEntry('info', `Running ${testCases.length} hidden test case(s)...`, 'test'),
   ]
+  const failAll = (message: string): HiddenTestRunResult => ({
+    passed: 0,
+    total: testCases.length,
+    consoleEntries,
+    testResults: testCases.map(() => ({ status: 'failed', error: message })),
+  })
 
   if (testCases.length === 0) {
-    return { passed: 0, total: 0, consoleEntries }
+    return { passed: 0, total: 0, consoleEntries, testResults: [] }
   }
 
   const { fnName, params } = parsePythonSignature(question.starterCode)
@@ -362,27 +371,31 @@ export async function runHiddenQuestionTests(
     const compileError = await validatePython(code)
     if (compileError) {
       consoleEntries.push(compileError)
-      return { passed: 0, total: testCases.length, consoleEntries }
+      return failAll(compileError.message)
     }
     pyodide = await getPyodide()
   } else {
     const compiled = await compileJavaScript(code, language)
     if (compiled.error) {
       consoleEntries.push(compiled.error)
-      return { passed: 0, total: testCases.length, consoleEntries }
+      return failAll(compiled.error.message)
     }
     compiledJavaScript = compiled.code
   }
 
+  const testResults: TestResult[] = testCases.map(() => ({ status: 'running' }))
   let passed = 0
 
   for (let index = 0; index < testCases.length; index += 1) {
     const example = testCases[index]
     const parsedInput = parseExampleInput(example.input)
     const expected = parseExpectedOutput(example.output)
+    const expectedLabel = stablePreview(expected)
     const args = params.map((param) => parsedInput[param])
 
     if (args.some((value) => value === undefined)) {
+      const message = `Hidden test case ${index + 1} could not be parsed.`
+      testResults[index] = { status: 'failed', error: message }
       continue
     }
 
@@ -391,11 +404,26 @@ export async function runHiddenQuestionTests(
         ? await runPythonCase(pyodide!, code, runtimeFnName, args)
         : await runJavaScriptCase(compiledJavaScript!, runtimeFnName, args)
 
-    if (execution.error || !valuesEqual(execution.result, expected)) {
+    if (execution.error) {
+      testResults[index] = {
+        status: 'failed',
+        error: execution.error.message,
+      }
       continue
     }
 
-    passed += 1
+    const actualLabel = stablePreview(execution.result)
+
+    if (valuesEqual(execution.result, expected)) {
+      testResults[index] = { status: 'passed' }
+      passed += 1
+    } else {
+      testResults[index] = {
+        status: 'failed',
+        expected: expectedLabel,
+        actual: actualLabel,
+      }
+    }
   }
 
   const summaryLevel = passed === testCases.length ? 'success' : 'warn'
@@ -407,7 +435,7 @@ export async function runHiddenQuestionTests(
     ),
   )
 
-  return { passed, total: testCases.length, consoleEntries }
+  return { passed, total: testCases.length, consoleEntries, testResults }
 }
 
 function stablePreview(value: unknown): string {

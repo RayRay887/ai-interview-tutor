@@ -185,7 +185,7 @@ export function Navbar() {
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
         {isPractice ? (
-          <nav className="relative isolate mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6 lg:px-8">
+          <nav className="relative isolate mx-auto grid w-full max-w-[100rem] grid-cols-[1fr_auto_1fr] items-center px-2 py-4 sm:px-3 lg:px-4">
             <div className="relative z-10 justify-self-start">{backLink}</div>
             <div className="relative z-[1] justify-self-center">{brand}</div>
             <div aria-hidden="true" />

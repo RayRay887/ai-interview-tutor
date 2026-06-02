@@ -11,6 +11,8 @@ interface InterviewerPanelProps {
   showPlayButton?: boolean
   onRetry?: () => void
   onPlayIntroduction?: () => void
+  onSubmit?: () => void
+  submitDisabled?: boolean
 }
 
 function Waveform({ active }: { active: boolean }) {
@@ -57,6 +59,8 @@ export function InterviewerPanel({
   showPlayButton = false,
   onRetry,
   onPlayIntroduction,
+  onSubmit,
+  submitDisabled = false,
 }: InterviewerPanelProps) {
   const showLoader = phase === 'starting' || phase === 'thinking'
   const waveformActive =
@@ -136,6 +140,21 @@ export function InterviewerPanel({
           </div>
         )}
       </div>
+
+      {onSubmit && (
+        <div className="shrink-0 border-t border-white/10 px-3 py-2">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={submitDisabled}
+              className="rounded-md bg-linear-to-r from-accent-blue to-accent-purple px-3 py-1.5 text-xs font-medium text-white shadow-md shadow-accent-blue/20 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Submit
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
