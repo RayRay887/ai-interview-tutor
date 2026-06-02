@@ -172,6 +172,8 @@ function openAiInterviewTurnDevProxy(env: Record<string, string>): Plugin {
 
 When they pitch an approach or ask if they are on the right track: light encouragement only (e.g. "I like where this is going")—do not confirm correctness, say "excellent," or state Big-O for them. If vague, ask one clarifying question; if concrete, probe with a question instead of validating. Do not name the full pattern or fill in missing steps.
 
+If signals.sessionJustResumedAfterPauseSeconds is set, the candidate paused the session. Do NOT repeat the opening intro. If the pause was over a minute, briefly welcome them back in one short sentence, then continue from the transcript where you left off.
+
 Return JSON with reply and role (interviewer or hint).`
 
   return {

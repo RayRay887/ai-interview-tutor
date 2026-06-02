@@ -66,6 +66,8 @@ export interface InterviewerSignals {
   silenceSeconds: number
   testsJustRun: boolean
   candidateAskedForHint: boolean
+  /** Seconds the candidate paused before this turn (0 if not a post-pause turn). */
+  sessionJustResumedAfterPauseSeconds?: number
 }
 
 export interface InterviewerHintState {

@@ -25,6 +25,12 @@ export function Navbar() {
 
   const isHome = location.pathname === '/'
   const isPractice = location.pathname.startsWith('/practice/')
+  const isDashboard = location.pathname === '/dashboard'
+
+  const goToDashboard = () => {
+    navigate('/dashboard')
+    setMobileOpen(false)
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -91,10 +97,17 @@ export function Navbar() {
           <div className="hidden items-center gap-4 md:flex">
             {user ? (
               <>
-                <span className="flex items-center gap-2 text-sm text-text-secondary">
+                <button
+                  type="button"
+                  onClick={goToDashboard}
+                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-text-primary ${
+                    isDashboard ? 'text-text-primary' : 'text-text-secondary'
+                  }`}
+                  aria-label="Open dashboard"
+                >
                   <User className="h-4 w-4 text-accent-blue" />
                   {user.name.split(' ')[0]}
-                </span>
+                </button>
                 <Button to="/questions" variant="primary">
                   Start Practicing
                 </Button>
@@ -152,10 +165,14 @@ export function Navbar() {
             ))}
             {user ? (
               <>
-                <p className="flex items-center gap-2 text-sm text-text-secondary">
+                <button
+                  type="button"
+                  onClick={goToDashboard}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+                >
                   <User className="h-4 w-4 text-accent-blue" />
                   Signed in as {user.name}
-                </p>
+                </button>
                 <Button to="/questions" variant="primary" className="w-full">
                   Start Practicing
                 </Button>

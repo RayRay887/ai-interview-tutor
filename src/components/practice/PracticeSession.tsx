@@ -13,6 +13,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import {
   codeLanguages,
   getLanguageExtension,
@@ -32,6 +33,7 @@ import {
   formatCountdown,
   minutesToSeconds,
 } from '../../lib/questionDuration'
+import { recordQuestionCompleted, recordQuestionOpened } from '../../lib/practiceHistory'
 import { CodeEditor } from './CodeEditor'
 import { CollapsibleSection } from './CollapsibleSection'
 import { ConsolePanel } from './ConsolePanel'
@@ -67,6 +69,8 @@ export function PracticeSession({
   sessionMinutes,
   userTestMode,
 }: PracticeSessionProps) {
+  const { user } = useAuth()
+  const completedRecordedRef = useRef(false)
   const [language, setLanguage] = useState<CodeLanguage>('python')
   const [codeByLanguage, setCodeByLanguage] = useState<Partial<Record<CodeLanguage, string>>>({
     python: question.starterCode,
@@ -287,6 +291,17 @@ export function PracticeSession({
     hiddenSummary !== null && hiddenSummary.passed === hiddenSummary.total
   const allPassed =
     allVisiblePassed && (userTestMode || hiddenSummary === null || allHiddenPassed)
+
+  useEffect(() => {
+    if (!user) return
+    recordQuestionOpened(user.id, question)
+  }, [user, question])
+
+  useEffect(() => {
+    if (!user || !allPassed || completedRecordedRef.current) return
+    completedRecordedRef.current = true
+    recordQuestionCompleted(user.id, question)
+  }, [user, question, allPassed])
 
   useEffect(() => {
     if (!isTimerRunning) return
