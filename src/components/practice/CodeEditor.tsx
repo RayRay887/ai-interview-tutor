@@ -32,8 +32,8 @@ const prepifyEditorTheme = EditorView.theme(
     },
     '.cm-scroller': {
       fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-      fontSize: '12px',
-      lineHeight: '1.625',
+      fontSize: '13px',
+      lineHeight: '1.6',
     },
     '.cm-gutters': {
       backgroundColor: '#0b1730',

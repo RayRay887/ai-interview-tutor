@@ -266,7 +266,7 @@ export function DashboardPage() {
             <div>
               <h2 className="text-base font-medium text-text-primary">Interview feedback</h2>
               <p className="text-xs text-text-secondary">
-                FAANG-style rubric scores after you submit a session
+                Tech Interview Handbook & Golden Rubric scores after you submit a session
               </p>
             </div>
           </div>

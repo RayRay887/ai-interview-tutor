@@ -4,11 +4,14 @@ import { requestSpeechAudio } from '../lib/interviewApi'
 let activeAudio: HTMLAudioElement | null = null
 let activeObjectUrl: string | null = null
 let speakGeneration = 0
+let activePlaybackResolve: (() => void) | null = null
 
 /** Stop any in-flight or playing interviewer audio (e.g. when leaving practice). */
 export function stopAllInterviewAudio() {
   speakGeneration += 1
   stopActiveAudio()
+  activePlaybackResolve?.()
+  activePlaybackResolve = null
 }
 
 function stopActiveAudio() {
@@ -33,6 +36,7 @@ function playBlobInternal(blob: Blob, generation: number): Promise<void> {
     }
 
     stopActiveAudio()
+    activePlaybackResolve = () => resolve()
 
     const url = URL.createObjectURL(blob)
     activeObjectUrl = url
@@ -40,20 +44,25 @@ function playBlobInternal(blob: Blob, generation: number): Promise<void> {
     activeAudio = audio
     audio.volume = 1
 
-    audio.onended = () => {
+    const finish = () => {
       if (generation !== speakGeneration) return
+      activePlaybackResolve = null
       stopActiveAudio()
       resolve()
     }
 
+    audio.onended = finish
+
     audio.onerror = () => {
       if (generation !== speakGeneration) return
+      activePlaybackResolve = null
       stopActiveAudio()
       reject(new Error('Failed to play audio.'))
     }
 
     void audio.play().catch((error: unknown) => {
       if (generation !== speakGeneration) return
+      activePlaybackResolve = null
       stopActiveAudio()
       const name = error instanceof DOMException ? error.name : ''
       if (name === 'NotAllowedError') {
