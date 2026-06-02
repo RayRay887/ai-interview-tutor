@@ -90,8 +90,15 @@ export function Navbar() {
   const brand = <PrepifyLogo size="md" to="/" linked />
 
   const handleBackToQuestions = () => {
+    if (practiceAttempt?.requestLeave) {
+      practiceAttempt.requestLeave(async () => {
+        stopAllInterviewAudio()
+        navigate('/questions')
+      })
+      return
+    }
+
     stopAllInterviewAudio()
-    void practiceAttempt?.abandonSession()
     navigate('/questions')
   }
 

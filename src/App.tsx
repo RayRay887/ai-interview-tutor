@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom'
 import { ScrollToTop } from './components/layout/ScrollToTop'
 import { AuthProvider } from './context/AuthContext'
 import { SignInModalProvider } from './context/SignInModalContext'
@@ -12,32 +12,46 @@ import { PracticePage } from './pages/PracticePage'
 import { SessionFeedbackPage } from './pages/SessionFeedbackPage'
 import { QuestionsPage } from './pages/QuestionsPage'
 
+function AppShell() {
+  return (
+    <SignInModalProvider>
+      <ScrollToTop />
+      <Outlet />
+    </SignInModalProvider>
+  )
+}
+
+const router = createBrowserRouter([
+  {
+    element: <AppShell />,
+    children: [
+      {
+        element: <AuthLayout />,
+        children: [{ path: 'auth', element: <AuthPage /> }],
+      },
+      {
+        element: <Layout />,
+        children: [
+          { index: true, element: <HomePage /> },
+          { path: 'questions', element: <QuestionsPage /> },
+          { path: 'dashboard', element: <DashboardPage /> },
+          { path: 'feedback/attempt/:attemptId', element: <SessionFeedbackPage /> },
+        ],
+      },
+      {
+        path: 'practice/:slug',
+        element: <PracticeLayout />,
+        children: [{ index: true, element: <PracticePage /> }],
+      },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+])
+
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <SignInModalProvider>
-          <ScrollToTop />
-          <Routes>
-            <Route element={<AuthLayout />}>
-              <Route path="/auth" element={<AuthPage />} />
-            </Route>
-
-            <Route element={<Layout />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/questions" element={<QuestionsPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/feedback/attempt/:attemptId" element={<SessionFeedbackPage />} />
-            </Route>
-
-            <Route element={<PracticeLayout />}>
-              <Route path="/practice/:slug" element={<PracticePage />} />
-            </Route>
-
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </SignInModalProvider>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </AuthProvider>
   )
 }
