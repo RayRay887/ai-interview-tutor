@@ -9,6 +9,8 @@ import type {
 import { getPhaseForElapsedRatio } from './types'
 import { fromPracticeConsole } from './buildContext'
 
+import { isAlreadyCoding } from './codingState'
+
 export interface PracticeSessionSnapshot {
   code: string
   language: CodeLanguage
@@ -51,6 +53,7 @@ export function buildInterviewerContext(
   hintLevel: HintLevel,
   codeAtLastTurn: string,
   silenceSeconds: number,
+  starterCode: string,
 ): InterviewerContext {
   const minutesRemaining = Math.ceil(snapshot.remainingSeconds / 60)
   const elapsedRatio =
@@ -95,6 +98,11 @@ export function buildInterviewerContext(
       silenceSeconds,
       testsJustRun: snapshot.testsJustRun,
       candidateAskedForHint: false,
+      alreadyCoding: isAlreadyCoding(
+        snapshot.code,
+        starterCode,
+        snapshot.code !== codeAtLastTurn,
+      ),
     },
     hintState: { levelUsed: hintLevel },
   }

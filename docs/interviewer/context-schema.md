@@ -44,7 +44,9 @@ TypeScript definitions: [`src/prompts/interviewer/types.ts`](../../src/prompts/i
   "signals": {
     "silenceSeconds": 12,
     "testsJustRun": false,
-    "candidateAskedForHint": false
+    "candidateAskedForHint": false,
+    "alreadyCoding": true,
+    "silenceProbe": false
   },
   "hintState": {
     "levelUsed": 1
@@ -123,6 +125,13 @@ Send the **last 12 turns** (default); always include the opening. Cap candidate 
 | `silenceSeconds` | Since last candidate speech ended |
 | `testsJustRun` | `true` for one turn after Run tests completes |
 | `candidateAskedForHint` | Phrases like "hint", "stuck", "help" detected |
+| `approachClarity` | Client-side rule: `vague` \| `partial` \| `concrete` |
+| `approachProbeCount` | How many approach follow-up questions the interviewer has asked |
+| `sessionJustResumedAfterPauseSeconds` | Set once after the candidate resumes from pause |
+| `alreadyCoding` | `true` when editor code differs from starter or has grown beyond the template |
+| `silenceProbe` | `true` on proactive turns when the candidate has been coding silently (~50s) |
+
+Utterance gating (thinking-aloud during coding) runs **client-side** in [`useInterviewSession.ts`](../../src/hooks/useInterviewSession.ts)—those monologues are not sent to the LLM. See [`assessUtteranceIntent.ts`](../../src/prompts/interviewer/assessUtteranceIntent.ts).
 
 ### `hintState`
 

@@ -7,7 +7,9 @@ import {
 } from '../lib/interviewApi'
 import { pickInterviewerName } from '../lib/interviewerSession'
 import { assessApproachClarity } from '../prompts/interviewer/assessApproach'
+import { assessUtteranceIntent } from '../prompts/interviewer/assessUtteranceIntent'
 import { buildContextStats, buildInterviewerPayload } from '../prompts/interviewer/buildContext'
+import { isAlreadyCoding, isCodingMode } from '../prompts/interviewer/codingState'
 import {
   buildInterviewerContext,
   candidateAskedForHint,
@@ -15,6 +17,7 @@ import {
 } from '../prompts/interviewer/sessionSnapshot'
 import type {
   HintLevel,
+  InterviewSessionPhase,
   InterviewerQuestionContext,
   InterviewerTranscriptEntry,
 } from '../prompts/interviewer/types'
@@ -40,6 +43,11 @@ interface UseInterviewSessionOptions {
 function toTurnMessages(transcript: InterviewerTranscriptEntry[]) {
   return transcript.map(({ role, text }) => ({ role, text }))
 }
+
+const SILENCE_PROBE_MS = 50_000
+const SILENCE_PROBE_COOLDOWN_MS = 120_000
+const CODING_VAD_SILENCE_MS = 3500
+const DEFAULT_VAD_SILENCE_MS = 2800
 
 function payloadToTurnRequest(
   payload: Record<string, unknown>,
@@ -119,6 +127,8 @@ export function useInterviewSession({
   const codeAtLastTurnRef = useRef('')
   const sessionStartRef = useRef(Date.now())
   const lastCandidateSpeechRef = useRef(Date.now())
+  const lastSilenceProbeRef = useRef(0)
+  const phaseRef = useRef<InterviewPhase>('idle')
   const processingRef = useRef(false)
   const approachProbeCountRef = useRef(0)
   const lastSessionPhaseRef = useRef<string>('opening')
@@ -145,6 +155,10 @@ export function useInterviewSession({
   useEffect(() => {
     transcriptRef.current = transcript
   }, [transcript])
+
+  useEffect(() => {
+    phaseRef.current = phase
+  }, [phase])
 
   useEffect(() => {
     getSnapshotRef.current = getSnapshot
@@ -174,10 +188,16 @@ export function useInterviewSession({
   }, [])
 
   const buildTurnRequest = useCallback(
-    (userMessage: string, transcriptForTurn: InterviewerTranscriptEntry[]): InterviewTurnRequest => {
+    (
+      userMessage: string,
+      transcriptForTurn: InterviewerTranscriptEntry[],
+      options?: { silenceProbe?: boolean },
+    ): InterviewTurnRequest => {
       const snapshot = getSnapshotRef.current()
       const silenceSeconds = Math.round((Date.now() - lastCandidateSpeechRef.current) / 1000)
-      const approachClarity = assessApproachClarity(userMessage)
+      const approachClarity = options?.silenceProbe ? undefined : assessApproachClarity(userMessage)
+      const codeChanged = snapshot.code !== codeAtLastTurnRef.current
+      const alreadyCoding = isAlreadyCoding(snapshot.code, question.starterCode, codeChanged)
 
       const context = buildInterviewerContext(
         question,
@@ -186,13 +206,24 @@ export function useInterviewSession({
         hintLevel,
         codeAtLastTurnRef.current,
         silenceSeconds,
+        question.starterCode,
       )
 
-      context.signals.candidateAskedForHint = candidateAskedForHint(userMessage)
+      context.signals.candidateAskedForHint = options?.silenceProbe
+        ? false
+        : candidateAskedForHint(userMessage)
       context.signals.approachClarity = approachClarity
       context.signals.approachProbeCount = approachProbeCountRef.current
+      context.signals.alreadyCoding = alreadyCoding
+      if (options?.silenceProbe) {
+        context.signals.silenceProbe = true
+      }
 
-      if (context.session.phase === 'approach' && approachClarity === 'concrete') {
+      if (
+        context.session.phase === 'approach' &&
+        approachClarity === 'concrete' &&
+        !alreadyCoding
+      ) {
         context.session = { ...context.session, phase: 'implementation' }
       }
 
@@ -276,8 +307,25 @@ export function useInterviewSession({
       const text = rawText.trim()
       if (!text || processingRef.current || pausedRef.current || sessionEndedRef.current) return
 
-      processingRef.current = true
       lastCandidateSpeechRef.current = Date.now()
+
+      const snapshot = getSnapshotRef.current()
+      const codeChanged = snapshot.code !== codeAtLastTurnRef.current
+      const alreadyCoding = isAlreadyCoding(snapshot.code, question.starterCode, codeChanged)
+      const codingMode = isCodingMode(
+        lastSessionPhaseRef.current as InterviewSessionPhase,
+        alreadyCoding,
+      )
+      const intent = assessUtteranceIntent(text)
+
+      if (codingMode && (intent === 'thinkingAloud' || intent === 'filler')) {
+        if (import.meta.env.DEV) {
+          console.debug('[voice-turn] skipped', { intent, codingMode, text: text.slice(0, 80) })
+        }
+        return
+      }
+
+      processingRef.current = true
       setError(null)
       setPhase('thinking')
 
@@ -299,6 +347,8 @@ export function useInterviewSession({
             totalMs: Math.round(performance.now() - turnStart),
             approachClarity,
             approachProbeCount: approachProbeCountRef.current,
+            intent,
+            alreadyCoding,
           })
         }
       } catch (err) {
@@ -313,8 +363,36 @@ export function useInterviewSession({
         processingRef.current = false
       }
     },
-    [appendTranscript, buildTurnRequest, deliverReply],
+    [appendTranscript, buildTurnRequest, deliverReply, question.starterCode],
   )
+
+  const requestSilenceProbe = useCallback(async () => {
+    if (processingRef.current || pausedRef.current || sessionEndedRef.current) return
+    if (phaseRef.current !== 'listening') return
+
+    processingRef.current = true
+    lastSilenceProbeRef.current = Date.now()
+    setError(null)
+    setPhase('thinking')
+
+    try {
+      const turn = await requestInterviewTurn(
+        buildTurnRequest('', transcriptRef.current, { silenceProbe: true }),
+      )
+      if (pausedRef.current || sessionEndedRef.current) return
+      await deliverReply(turn.reply, turn.role)
+    } catch (err) {
+      if (sessionEndedRef.current) return
+      const message =
+        err instanceof Error ? err.message : 'Could not reach the interviewer.'
+      setError(message)
+      if (!pausedRef.current) {
+        setPhase('listening')
+      }
+    } finally {
+      processingRef.current = false
+    }
+  }, [buildTurnRequest, deliverReply])
 
   const micActive =
     enabled &&
@@ -327,10 +405,22 @@ export function useInterviewSession({
 
   const vadEnabled = micActive && phase === 'listening' && !isSpeaking
 
+  const snapshotForVad = getSnapshotRef.current()
+  const vadAlreadyCoding = isAlreadyCoding(
+    snapshotForVad.code,
+    question.starterCode,
+    snapshotForVad.code !== codeAtLastTurnRef.current,
+  )
+  const vadCodingMode = isCodingMode(
+    lastSessionPhaseRef.current as InterviewSessionPhase,
+    vadAlreadyCoding,
+  )
+
   const speech = useWhisperCapture({
     active: micActive,
     vadEnabled,
     deviceId: microphoneDeviceId,
+    silenceMs: vadCodingMode ? CODING_VAD_SILENCE_MS : DEFAULT_VAD_SILENCE_MS,
     onUtterance: (text) => {
       void handleCandidateMessage(text)
     },
@@ -347,6 +437,35 @@ export function useInterviewSession({
   speechResumeRef.current = speech.resumeAudioContext
   ttsStopRef.current = stopTTS
 
+  useEffect(() => {
+    if (!micActive || paused || sessionEndedRef.current) return
+
+    const interval = window.setInterval(() => {
+      if (processingRef.current || pausedRef.current || sessionEndedRef.current) return
+      if (phaseRef.current !== 'listening') return
+
+      const snapshot = getSnapshotRef.current()
+      const codeChanged = snapshot.code !== codeAtLastTurnRef.current
+      const alreadyCoding = isAlreadyCoding(snapshot.code, question.starterCode, codeChanged)
+      const codingMode = isCodingMode(
+        lastSessionPhaseRef.current as InterviewSessionPhase,
+        alreadyCoding,
+      )
+
+      if (!codingMode) return
+
+      const silentMs = Date.now() - lastCandidateSpeechRef.current
+      const sinceLastProbe = Date.now() - lastSilenceProbeRef.current
+
+      if (silentMs < SILENCE_PROBE_MS) return
+      if (sinceLastProbe < SILENCE_PROBE_COOLDOWN_MS) return
+
+      void requestSilenceProbe()
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [micActive, paused, question.starterCode, requestSilenceProbe])
+
   const startSession = useCallback(async () => {
     const runId = ++sessionRunIdRef.current
 
@@ -360,6 +479,7 @@ export function useInterviewSession({
     codeAtLastTurnRef.current = getSnapshotRef.current().code
     sessionStartRef.current = Date.now()
     lastCandidateSpeechRef.current = Date.now()
+    lastSilenceProbeRef.current = 0
     setConversationStarted(false)
     processingRef.current = false
     sessionEndedRef.current = false
@@ -418,18 +538,15 @@ export function useInterviewSession({
     if (!enabled) return
 
     const saved = resumeInterviewRef.current
-    if (saved) {
+    if (saved && saved.transcript.length > 0) {
       sessionEndedRef.current = false
       processingRef.current = false
       setError(null)
-      if (saved.transcript.length > 0) {
-        setTranscript(saved.transcript)
-        transcriptRef.current = saved.transcript
-        setHintLevel(saved.hintLevel)
-      }
+      setTranscript(saved.transcript)
+      transcriptRef.current = saved.transcript
+      setHintLevel(saved.hintLevel)
       setConversationStarted(true)
-      lastSessionPhaseRef.current =
-        saved.transcript.length > 0 ? 'implementation' : 'approach'
+      lastSessionPhaseRef.current = 'implementation'
       codeAtLastTurnRef.current = getSnapshotRef.current().code
       sessionStartRef.current = Date.now()
       lastCandidateSpeechRef.current = Date.now()

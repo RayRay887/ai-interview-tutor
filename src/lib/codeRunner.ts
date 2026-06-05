@@ -110,25 +110,36 @@ function parseJsRuntimeError(error: unknown): ConsoleEntry {
   return createEntry('error', text, 'runtime')
 }
 
+const PYTHON_EXCEPTION =
+  /^(?:SyntaxError|IndentationError|NameError|TypeError|ValueError|KeyError|IndexError|AttributeError|ZeroDivisionError|RuntimeError|RecursionError)(?::|\b)/
+
 function parsePythonError(error: unknown): ConsoleEntry {
   const text = error instanceof Error ? error.message : String(error)
-  const syntaxMatch = text.match(/File "<\w+>", line (\d+)[\s\S]*?\n\s*(.+)/)
-  const lineMatch = text.match(/line (\d+)/)
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
 
-  if (syntaxMatch) {
-    return createEntry('error', syntaxMatch[2].trim(), 'compile', Number(syntaxMatch[1]))
+  const exceptionLine =
+    [...lines].reverse().find((line) => PYTHON_EXCEPTION.test(line)) ??
+    lines[lines.length - 1] ??
+    text
+
+  let message = exceptionLine
+  if (message.includes('is not JSON serializable')) {
+    message =
+      'Return value must be JSON-serializable (list, dict, number, string, boolean, or null).'
   }
 
-  if (lineMatch) {
-    return createEntry(
-      'error',
-      text.split('\n').pop()?.trim() ?? text,
-      'runtime',
-      Number(lineMatch[1]),
-    )
+  const stringLineMatch = text.match(/File "<string>", line (\d+)/)
+  if (stringLineMatch) {
+    return createEntry('error', message, 'compile', Number(stringLineMatch[1]))
   }
 
-  return createEntry('error', text, 'runtime')
+  const execFrames = [...text.matchAll(/File "<exec>", line (\d+), in (\S+)/g)]
+  const userFrame = execFrames.filter((match) => match[2] !== '<module>').at(-1) ?? execFrames.at(-1)
+  const line = userFrame ? Number(userFrame[1]) : undefined
+  const isSyntax =
+    exceptionLine.startsWith('SyntaxError') || exceptionLine.startsWith('IndentationError')
+
+  return createEntry('error', message, isSyntax ? 'compile' : 'runtime', line)
 }
 
 async function compileJavaScript(code: string, language: 'javascript' | 'typescript') {
@@ -172,9 +183,31 @@ ast.parse(${JSON.stringify(code)})
   }
 }
 
-async function runPythonCase(
+async function preparePythonUserCode(
   pyodide: PyodideInterface,
   code: string,
+  fnName: string,
+): Promise<ConsoleEntry | null> {
+  try {
+    await pyodide.runPythonAsync(code)
+    const isCallable = await pyodide.runPythonAsync(
+      `callable(globals().get(${JSON.stringify(fnName)}))`,
+    )
+    if (!isCallable) {
+      return createEntry(
+        'error',
+        `Function "${fnName}" was not found. Make sure your solution is defined.`,
+        'runtime',
+      )
+    }
+    return null
+  } catch (error) {
+    return parsePythonError(error)
+  }
+}
+
+async function runPythonCase(
+  pyodide: PyodideInterface,
   fnName: string,
   args: unknown[],
 ): Promise<{ result?: unknown; error?: ConsoleEntry }> {
@@ -183,7 +216,6 @@ async function runPythonCase(
   try {
     const resultJson = await pyodide.runPythonAsync(`
 import json
-${code}
 _result = ${fnName}(*json.loads(${JSON.stringify(argsJson)}))
 json.dumps(_result)
 `)
@@ -254,6 +286,17 @@ export async function runQuestionTests(
       }
     }
     pyodide = await getPyodide()
+    const loadError = await preparePythonUserCode(pyodide, code, runtimeFnName)
+    if (loadError) {
+      consoleEntries.push(loadError)
+      return {
+        consoleEntries,
+        testResults: testCases.map(() => ({
+          status: 'failed',
+          error: loadError.message,
+        })),
+      }
+    }
   } else {
     const compiled = await compileJavaScript(code, language)
     if (compiled.error) {
@@ -292,7 +335,7 @@ export async function runQuestionTests(
 
     const execution =
       language === 'python'
-        ? await runPythonCase(pyodide!, code, runtimeFnName, args)
+        ? await runPythonCase(pyodide!, runtimeFnName, args)
         : await runJavaScriptCase(compiledJavaScript!, runtimeFnName, args)
 
     if (execution.error) {
@@ -374,6 +417,11 @@ export async function runHiddenQuestionTests(
       return failAll(compileError.message)
     }
     pyodide = await getPyodide()
+    const loadError = await preparePythonUserCode(pyodide, code, runtimeFnName)
+    if (loadError) {
+      consoleEntries.push(loadError)
+      return failAll(loadError.message)
+    }
   } else {
     const compiled = await compileJavaScript(code, language)
     if (compiled.error) {
@@ -401,7 +449,7 @@ export async function runHiddenQuestionTests(
 
     const execution =
       language === 'python'
-        ? await runPythonCase(pyodide!, code, runtimeFnName, args)
+        ? await runPythonCase(pyodide!, runtimeFnName, args)
         : await runJavaScriptCase(compiledJavaScript!, runtimeFnName, args)
 
     if (execution.error) {
