@@ -20,13 +20,15 @@ export interface InterviewTurnRequest {
   console?: { level: 'info' | 'success' | 'error' | 'warn'; message: string; line?: number }[]
   tests?: { passed: number; total: number; lastFailures?: string[] }
   session?: { language?: string; minutesRemaining?: number; phase?: string }
-  signals?: {
+    signals?: {
     silenceSeconds?: number
     testsJustRun?: boolean
     candidateAskedForHint?: boolean
     approachClarity?: 'vague' | 'partial' | 'concrete'
     approachProbeCount?: number
     sessionJustResumedAfterPauseSeconds?: number
+    alreadyCoding?: boolean
+    silenceProbe?: boolean
   }
   hintState?: { levelUsed?: number }
 }

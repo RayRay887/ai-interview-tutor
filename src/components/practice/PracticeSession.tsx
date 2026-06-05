@@ -141,15 +141,13 @@ function buildInitialSessionState(
   const customTestCases =
     slugDraft?.customTestCases?.length ? slugDraft.customTestCases : (local?.customTestCases ?? [])
 
-  const resumeInterview = restoredAttempt
-    ? {
-        transcript:
-          restoredAttempt.transcript.length > 0
-            ? transcriptFromAttempt(restoredAttempt.transcript)
-            : [],
-        hintLevel: Math.min(4, restoredAttempt.hints_used) as HintLevel,
-      }
-    : null
+  const resumeInterview =
+    restoredAttempt && restoredAttempt.transcript.length > 0
+      ? {
+          transcript: transcriptFromAttempt(restoredAttempt.transcript),
+          hintLevel: Math.min(4, restoredAttempt.hints_used) as HintLevel,
+        }
+      : null
 
   return {
     language,

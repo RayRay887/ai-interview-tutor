@@ -70,6 +70,10 @@ export interface InterviewerSignals {
   approachProbeCount?: number
   /** Seconds the candidate paused before this turn (0 if not a post-pause turn). */
   sessionJustResumedAfterPauseSeconds?: number
+  /** Candidate has meaningful code in the editor (beyond starter template). */
+  alreadyCoding?: boolean
+  /** Proactive turn triggered after extended silence while coding. */
+  silenceProbe?: boolean
 }
 
 export interface InterviewerHintState {
